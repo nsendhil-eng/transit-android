@@ -4,12 +4,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import space.snapp.waygo.data.models.FavoriteStop
 import space.snapp.waygo.ui.departures.DeparturesScreen
@@ -119,7 +121,12 @@ fun FavoriteCard(
         }
     ) {
         ListItem(
-            headlineContent = { Text(favorite.name, style = MaterialTheme.typography.bodyLarge) },
+            headlineContent = {
+                Text(
+                    favorite.name,
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
+                )
+            },
             supportingContent = {
                 Column {
                     Text(
@@ -129,27 +136,38 @@ fun FavoriteCard(
                         maxLines = 2
                     )
                     favorite.getOffStopName?.let { dest ->
-                        Text("-> $dest", style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            "→ $dest",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             },
             leadingContent = {
+                // Rounded-rect badge with red heart, matching iOS heart.fill
                 Surface(
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
                     modifier = Modifier.size(44.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Favorite, contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Icon(
+                            Icons.Default.Favorite,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(22.dp)
+                        )
                     }
                 }
             },
             trailingContent = {
                 IconButton(onClick = onEdit) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit",
-                        tint = MaterialTheme.colorScheme.primary)
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = "Edit",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
                 }
             },
             modifier = Modifier.clickable(onClick = onTap)

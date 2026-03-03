@@ -20,6 +20,7 @@ import space.snapp.waygo.ui.departures.DeparturesScreen
 import space.snapp.waygo.ui.departures.DeparturesViewModel
 import space.snapp.waygo.ui.favorites.AddFavouriteSheet
 import space.snapp.waygo.ui.favorites.FavoritesViewModel
+import space.snapp.waygo.ui.map.NearbyStopsMapView
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -142,17 +143,23 @@ fun SearchScreen(
                             }
                             items(results.routes, key = { it.id }) { route ->
                                 ListItem(
-                                    headlineContent = { Text("-> ${route.tripHeadsign ?: route.routeLongName}") },
+                                    headlineContent = { Text("→ ${route.tripHeadsign ?: route.routeLongName}") },
                                     supportingContent = { Text(route.routeLongName) },
                                     leadingContent = {
-                                        Surface(color = route.routeColor?.let { parseColor(it) }
-                                            ?: MaterialTheme.colorScheme.primary,
-                                            shape = MaterialTheme.shapes.small) {
-                                            Text(route.routeShortName,
-                                                style = MaterialTheme.typography.labelLarge,
+                                        Surface(
+                                            color = route.routeColor?.let { parseColor(it) }
+                                                ?: MaterialTheme.colorScheme.primary,
+                                            shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
+                                        ) {
+                                            Text(
+                                                route.routeShortName,
+                                                style = MaterialTheme.typography.titleSmall.copy(
+                                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                                                ),
                                                 color = route.routeTextColor?.let { parseColor(it) }
                                                     ?: MaterialTheme.colorScheme.onPrimary,
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                            )
                                         }
                                     }
                                 )
@@ -166,17 +173,11 @@ fun SearchScreen(
                 DeparturesScreen(viewModel = departuresVM, stops = selectedStops)
             }
             else -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Search, contentDescription = null,
-                            modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.height(16.dp))
-                        Text("Search for a stop or route", style = MaterialTheme.typography.titleMedium)
-                        Text("Type a stop name, route number, or suburb",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
+                NearbyStopsMapView(
+                    userLat = userLat,
+                    userLon = userLon,
+                    onAddStops = { stops -> stops.forEach { viewModel.addStop(it) } }
+                )
             }
         }
     }

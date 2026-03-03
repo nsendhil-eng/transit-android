@@ -1,16 +1,21 @@
 package space.snapp.waygo.ui.departures
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import space.snapp.waygo.data.api.models.Stop
 
@@ -31,25 +36,28 @@ fun DeparturesScreen(
     DisposableEffect(Unit) { onDispose { viewModel.stopAutoRefresh() } }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Route filter chips
+        // Route filter — capsule buttons matching iOS RouteFilterBar
         val routes = viewModel.availableRoutes
         if (routes.isNotEmpty()) {
             Row(
                 modifier = Modifier
                     .horizontalScroll(rememberScrollState())
+                    .background(MaterialTheme.colorScheme.surface)
                     .padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                FilterChip(
-                    selected = routeFilter == null,
-                    onClick = { viewModel.setRouteFilter(null) },
-                    label = { Text("All") }
+                // "All" capsule
+                RouteFilterCapsule(
+                    label = "All",
+                    active = routeFilter == null,
+                    onClick = { viewModel.setRouteFilter(null) }
                 )
                 routes.forEach { route ->
-                    FilterChip(
-                        selected = routeFilter == route,
-                        onClick = { viewModel.setRouteFilter(if (routeFilter == route) null else route) },
-                        label = { Text(route) }
+                    RouteFilterCapsule(
+                        label = route,
+                        active = routeFilter == route,
+                        onClick = { viewModel.setRouteFilter(if (routeFilter == route) null else route) }
                     )
                 }
             }
@@ -85,5 +93,27 @@ fun DeparturesScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun RouteFilterCapsule(label: String, active: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(50)
+    Box(
+        modifier = Modifier
+            .clip(shape)
+            .background(
+                if (active) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.surfaceVariant
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+            color = if (active) MaterialTheme.colorScheme.onPrimary
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }

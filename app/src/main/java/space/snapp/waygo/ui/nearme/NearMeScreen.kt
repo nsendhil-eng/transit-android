@@ -1,15 +1,21 @@
 package space.snapp.waygo.ui.nearme
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import space.snapp.waygo.data.api.models.VehicleType
 import space.snapp.waygo.ui.components.icon
@@ -35,17 +41,27 @@ fun NearMeScreen(
     }
 
     if (!hasLocationPermission) {
+        // Location permission prompt — matches iOS locationPermissionPrompt
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
-                Icon(Icons.Default.LocationOff, contentDescription = null,
-                    modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(16.dp))
-                Text("Location access needed", style = MaterialTheme.typography.titleMedium)
-                Text("WayGo needs your location to find nearby stops.",
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(32.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Icon(
+                    Icons.Default.LocationOn,
+                    contentDescription = null,
+                    modifier = Modifier.size(64.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text("Location Access Needed", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "Allow location access to find transit stops near you.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = 8.dp))
-                Button(onClick = onRequestPermission) { Text("Allow Location") }
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Button(onClick = onRequestPermission) { Text("Allow Location Access") }
             }
         }
         return
@@ -53,41 +69,52 @@ fun NearMeScreen(
 
     when {
         isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 CircularProgressIndicator()
-                Spacer(Modifier.height(8.dp))
-                Text("Finding stops near you...", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Finding stops near you…", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         error != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.LocationOff, contentDescription = null, modifier = Modifier.size(48.dp))
-                Spacer(Modifier.height(8.dp))
-                Text(error ?: "Location error")
-                Spacer(Modifier.height(8.dp))
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.LocationOff, contentDescription = null, modifier = Modifier.size(48.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Location error", style = MaterialTheme.typography.titleMedium)
+                Text(error ?: "", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(4.dp))
                 Button(onClick = { if (userLat != null && userLon != null) viewModel.fetchNearby(userLat, userLon) }) {
                     Text("Retry")
                 }
             }
         }
         viewModel.availableTypes.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No stops found nearby", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.DirectionsBus, contentDescription = null, modifier = Modifier.size(48.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("No stops found", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "No public transport stops found nearby.\nTry moving closer to a stop.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
         }
         else -> {
             Column(Modifier.fillMaxSize()) {
-                // Type tab bar
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                // Type tab bar — capsule buttons with icon + label matching iOS
+                Row(
+                    modifier = Modifier
+                        .horizontalScroll(rememberScrollState())
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    items(viewModel.availableTypes) { type ->
-                        FilterChip(
+                    viewModel.availableTypes.forEach { type ->
+                        TypeTabCapsule(
+                            type = type,
                             selected = selectedType == type,
-                            onClick = { viewModel.selectType(type) },
-                            label = { Text(type.label) },
-                            leadingIcon = {
-                                Icon(type.icon(), contentDescription = null, modifier = Modifier.size(16.dp))
-                            }
+                            onClick = { viewModel.selectType(type) }
                         )
                     }
                 }
@@ -98,31 +125,42 @@ fun NearMeScreen(
                     val depsVM = remember(type) { DeparturesViewModel() }
 
                     Column(Modifier.fillMaxSize()) {
-                        // Stops header
+                        // Stops header — matches iOS stopsHeader
                         if (stops.isNotEmpty()) {
-                            Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
-                                Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-                                    Text(
-                                        "Nearest ${type.label.lowercase()} stops",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Spacer(Modifier.height(8.dp))
-                                    stops.forEach { stop ->
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(type.icon(), contentDescription = null,
-                                                modifier = Modifier.size(14.dp),
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                            Spacer(Modifier.width(8.dp))
-                                            Text(stop.name, style = MaterialTheme.typography.bodyMedium,
-                                                modifier = Modifier.weight(1f))
-                                            stop.distanceLabel?.let { dist ->
-                                                Text(dist, style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                            }
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    "Nearest ${type.label.lowercase()} stops".uppercase(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                stops.forEach { stop ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            type.icon(), contentDescription = null,
+                                            modifier = Modifier.size(14.dp).padding(end = 0.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            stop.name,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        stop.distanceLabel?.let { dist ->
+                                            Text(
+                                                dist,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
                                         }
                                     }
                                 }
@@ -134,5 +172,35 @@ fun NearMeScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun TypeTabCapsule(type: VehicleType, selected: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(50)
+    Row(
+        modifier = Modifier
+            .clip(shape)
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.surfaceVariant
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Icon(
+            type.icon(), contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = if (selected) MaterialTheme.colorScheme.onPrimary
+                   else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            type.label,
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+            color = if (selected) MaterialTheme.colorScheme.onPrimary
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }

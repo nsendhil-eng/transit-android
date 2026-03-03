@@ -1,6 +1,8 @@
 package space.snapp.waygo.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DirectionsBoat
@@ -13,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import space.snapp.waygo.data.api.models.Departure
@@ -48,13 +51,16 @@ fun DepartureRow(departure: Departure) {
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Route badge
-        Surface(color = bgColor, shape = RoundedCornerShape(6.dp)) {
+        // Route badge — minWidth 52dp, 8dp corners matching iOS RouteBadge
+        Surface(color = bgColor, shape = RoundedCornerShape(8.dp)) {
             Text(
                 departure.routeNumber,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                 color = txtColor,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                modifier = Modifier
+                    .widthIn(min = 52.dp)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                textAlign = TextAlign.Center
             )
         }
 
@@ -62,15 +68,9 @@ fun DepartureRow(departure: Departure) {
 
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Direction dot
+                // Direction dot — solid circle (iOS uses Circle().fill)
                 val dotColor = if (departure.directionId == 0) MaterialTheme.colorScheme.primary else Color(0xFFE65100)
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .then(Modifier.padding(end = 4.dp))
-                ) {
-                    Surface(color = dotColor, shape = RoundedCornerShape(4.dp), modifier = Modifier.fillMaxSize()) {}
-                }
+                Box(modifier = Modifier.size(8.dp).background(dotColor, CircleShape))
                 Spacer(Modifier.width(5.dp))
                 Text(
                     departure.headsign,
@@ -103,7 +103,7 @@ fun DepartureRow(departure: Departure) {
         Column(horizontalAlignment = Alignment.End) {
             Text(countdownText, style = MaterialTheme.typography.titleMedium, color = countdownColor)
             if (departure.isDelayed) {
-                Text("Delayed", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                Text("Delayed", style = MaterialTheme.typography.labelSmall, color = Color(0xFFE65100))
             }
         }
     }

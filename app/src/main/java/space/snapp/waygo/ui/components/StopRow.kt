@@ -2,6 +2,7 @@ package space.snapp.waygo.ui.components
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -29,9 +30,9 @@ fun StopRow(
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.Top
     ) {
-        // Vehicle icon badge
+        // Vehicle icon badge — circle matching iOS
         Surface(
-            shape = RoundedCornerShape(8.dp),
+            shape = CircleShape,
             color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
             modifier = Modifier.size(36.dp)
         ) {
