@@ -2,6 +2,11 @@ package space.snapp.waygo.ui.components
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DirectionsBoat
+import androidx.compose.material.icons.filled.DirectionsBus
+import androidx.compose.material.icons.filled.Train
+import androidx.compose.material.icons.filled.Tram
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -77,10 +82,10 @@ fun DepartureRow(departure: Departure) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = when (departure.vehicleType.lowercase()) {
-                        "train" -> androidx.compose.material.icons.Icons.Default.Train
-                        "ferry" -> androidx.compose.material.icons.Icons.Default.DirectionsBoat
-                        "tram"  -> androidx.compose.material.icons.Icons.Default.Tram
-                        else    -> androidx.compose.material.icons.Icons.Default.DirectionsBus
+                        "train" -> Icons.Default.Train
+                        "ferry" -> Icons.Default.DirectionsBoat
+                        "tram"  -> Icons.Default.Tram
+                        else    -> Icons.Default.DirectionsBus
                     },
                     contentDescription = departure.vehicleType,
                     modifier = Modifier.size(12.dp),
