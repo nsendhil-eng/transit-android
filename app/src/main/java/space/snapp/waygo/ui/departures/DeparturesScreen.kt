@@ -78,7 +78,12 @@ fun DeparturesScreen(
                     }
                 }
             }
-            departures.isEmpty() && !isLoading -> {
+            isLoading && departures.isEmpty() -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            }
+            departures.isEmpty() -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("No departures found", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }

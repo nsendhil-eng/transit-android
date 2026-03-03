@@ -100,7 +100,9 @@ fun SearchScreen(
             Spacer(Modifier.height(4.dp))
         }
 
-        // Content
+        // Content — weight(1f) constrains this to exactly the remaining height,
+        // preventing AndroidView (map) from overflowing up over the search bar.
+        Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
         val trimmed = query.trim()
         when {
             trimmed.length >= 2 -> {
@@ -180,6 +182,7 @@ fun SearchScreen(
                 )
             }
         }
+        } // end Box(weight(1f))
     }
 
     if (showSaveSheet) {

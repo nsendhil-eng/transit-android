@@ -41,6 +41,7 @@ class DeparturesViewModel : ViewModel() {
     fun startAutoRefresh(stops: List<Stop>, getOffStopId: String? = null) {
         currentStops = stops
         currentGetOffStopId = getOffStopId
+        _isLoading.value = true   // show spinner immediately, before coroutine fires
         refreshJob?.cancel()
         refreshJob = viewModelScope.launch {
             while (true) {
