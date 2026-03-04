@@ -3,8 +3,8 @@ package space.snapp.waygo.ui.theme
 import android.os.Build
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -89,9 +89,9 @@ private val WayGoTypography = Typography(
 @Composable
 fun WayGoTheme(content: @Composable () -> Unit) {
     val colorScheme = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        dynamicLightColorScheme(LocalContext.current)
+        dynamicDarkColorScheme(LocalContext.current)
     } else {
-        lightColorScheme()
+        darkColorScheme()
     }
     MaterialTheme(colorScheme = colorScheme, typography = WayGoTypography, content = content)
 }

@@ -7,6 +7,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
 import retrofit2.http.Query
 import space.snapp.waygo.data.api.models.Departure
+import space.snapp.waygo.data.api.models.RouteShape
 import space.snapp.waygo.data.api.models.SearchResponse
 import space.snapp.waygo.data.api.models.Stop
 
@@ -32,6 +33,12 @@ interface TransitApiService {
         @Query("lon") lon: Double,
         @Query("radius") radius: Int = 500
     ): List<Stop>
+
+    @GET("/api/shapes-near-me")
+    suspend fun shapesNearMe(
+        @Query("lat") lat: Double,
+        @Query("lon") lon: Double
+    ): List<RouteShape>
 
     companion object {
         val instance: TransitApiService by lazy {

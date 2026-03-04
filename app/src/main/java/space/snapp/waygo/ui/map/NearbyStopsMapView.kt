@@ -26,7 +26,9 @@ import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Polyline
 import space.snapp.waygo.data.api.TransitApiService
+import space.snapp.waygo.data.api.models.RouteShape
 import space.snapp.waygo.data.api.models.Stop
 import space.snapp.waygo.data.api.models.VehicleType
 import space.snapp.waygo.ui.components.icon
@@ -61,6 +63,7 @@ fun NearbyStopsMapView(
     val api = remember { TransitApiService.instance }
 
     var stopGroups by remember { mutableStateOf<List<StopGroup>>(emptyList()) }
+    var routeShapes by remember { mutableStateOf<List<RouteShape>>(emptyList()) }
     val selectedGroupState = remember { mutableStateOf<StopGroup?>(null) }
     val mapRef = remember { mutableStateOf<MapView?>(null) }
 
@@ -69,19 +72,44 @@ fun NearbyStopsMapView(
         Configuration.getInstance().userAgentValue = context.packageName
     }
 
-    // Fetch nearby stops and centre the map whenever location changes
+    // Fetch nearby stops + route shapes whenever location changes
     LaunchedEffect(userLat, userLon) {
         val lat = userLat ?: BRISBANE_LAT
         val lon = userLon ?: BRISBANE_LON
         mapRef.value?.controller?.animateTo(GeoPoint(lat, lon))
         runCatching { api.stopsNearMe(lat, lon, radius = 500) }
             .onSuccess { stops -> stopGroups = groupStops(stops) }
+        runCatching { api.shapesNearMe(lat, lon) }
+            .onSuccess { shapes -> routeShapes = shapes }
     }
 
-    // Rebuild map markers whenever stop groups change
-    LaunchedEffect(stopGroups) {
+    // Rebuild overlays whenever stops or shapes change
+    LaunchedEffect(stopGroups, routeShapes) {
         val map = mapRef.value ?: return@LaunchedEffect
+        val dp = context.resources.displayMetrics.density
         map.overlays.clear()
+
+        // Draw route polylines first (below stop markers)
+        for (shape in routeShapes) {
+            if (shape.points.size < 2) continue
+            val geoPoints = shape.points.map { GeoPoint(it[0], it[1]) }
+            val colorInt = shape.routeColor?.let {
+                runCatching { AndroidColor.parseColor("#${it.trimStart('#')}") }.getOrNull()
+            } ?: AndroidColor.rgb(120, 120, 120)
+
+            val polyline = Polyline().apply {
+                setPoints(geoPoints)
+                outlinePaint.color = colorInt
+                outlinePaint.alpha = 210
+                outlinePaint.strokeWidth = 5f * dp
+                outlinePaint.strokeCap = Paint.Cap.ROUND
+                outlinePaint.strokeJoin = Paint.Join.ROUND
+                outlinePaint.isAntiAlias = true
+            }
+            map.overlays.add(polyline)
+        }
+
+        // Draw stop markers on top
         for (group in stopGroups) {
             val marker = Marker(map).apply {
                 position = GeoPoint(group.latitude, group.longitude)
@@ -147,7 +175,7 @@ fun NearbyStopsMapView(
 
 private fun createMarkerIcon(context: android.content.Context, group: StopGroup): BitmapDrawable {
     val dp = context.resources.displayMetrics.density
-    val size = (44 * dp).toInt()
+    val size = (26 * dp).toInt()   // Reduced from 44dp → 26dp
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvas = AndroidCanvas(bitmap)
     val pinColor = group.primaryType.pinColorInt()
@@ -175,7 +203,7 @@ private fun createMarkerIcon(context: android.content.Context, group: StopGroup)
     }
     val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = AndroidColor.WHITE
-        textSize = 13f * dp
+        textSize = 8f * dp
         textAlign = Paint.Align.CENTER
         typeface = Typeface.DEFAULT_BOLD
     }
@@ -187,15 +215,15 @@ private fun createMarkerIcon(context: android.content.Context, group: StopGroup)
 
     // Platform-count badge
     if (group.isMultiPlatform) {
-        val r = 9f * dp
+        val r = 6f * dp
         canvas.drawCircle(size - r, r, r,
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = pinColor
+                color = AndroidColor.WHITE
                 style = Paint.Style.FILL
             })
         val badgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = AndroidColor.WHITE
-            textSize = 9f * dp
+            color = pinColor
+            textSize = 6f * dp
             textAlign = Paint.Align.CENTER
             typeface = Typeface.DEFAULT_BOLD
         }
