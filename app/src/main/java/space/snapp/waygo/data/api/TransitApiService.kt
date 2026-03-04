@@ -10,6 +10,7 @@ import space.snapp.waygo.data.api.models.Departure
 import space.snapp.waygo.data.api.models.RouteShape
 import space.snapp.waygo.data.api.models.SearchResponse
 import space.snapp.waygo.data.api.models.Stop
+import space.snapp.waygo.data.api.models.StopLiveResponse
 import space.snapp.waygo.data.api.models.VehiclePosition
 
 interface TransitApiService {
@@ -47,6 +48,11 @@ interface TransitApiService {
         @Query("lon") lon: Double,
         @Query("radius") radius: Int = 1000
     ): List<VehiclePosition>
+
+    @GET("/api/stop-live")
+    suspend fun stopLive(
+        @Query("stop_ids") stopIds: String
+    ): StopLiveResponse
 
     companion object {
         val instance: TransitApiService by lazy {
