@@ -14,6 +14,7 @@ data class Departure(
     val directionId: Int,
     val scheduledDepartureUtc: String,
     val expectedDepartureUtc: String?,
+    val isDelayed: Boolean = false,
     val secondsUntilDeparture: Int,
     val platformCode: String?,
     val routeColor: String?,
@@ -38,13 +39,6 @@ data class Departure(
             val m = s / 60
             if (m < 60) return "$m min"
             return "${m / 60}h ${m % 60}m"
-        }
-
-    val isDelayed: Boolean
-        get() {
-            if (expectedDepartureUtc == null) return false
-            val scheduled = parseIso(scheduledDepartureUtc) ?: return false
-            return departureDate.time - scheduled.time > 120_000
         }
 
     val routeColorInt: Int?

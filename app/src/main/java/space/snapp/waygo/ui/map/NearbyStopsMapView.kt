@@ -22,7 +22,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import org.osmdroid.config.Configuration
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
@@ -36,6 +36,18 @@ import space.snapp.waygo.ui.departures.DeparturesViewModel
 // Brisbane city centre fallback
 private const val BRISBANE_LAT = -27.4698
 private const val BRISBANE_LON = 153.0251
+
+// CartoDB Dark Matter — same tile source used in the translink-api web app
+private val CARTO_DARK_MATTER = XYTileSource(
+    "CartoDB.DarkMatter",
+    0, 19, 256, ".png",
+    arrayOf(
+        "https://a.basemaps.cartocdn.com/dark_all/",
+        "https://b.basemaps.cartocdn.com/dark_all/",
+        "https://c.basemaps.cartocdn.com/dark_all/"
+    ),
+    "© OpenStreetMap contributors © CARTO"
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -102,7 +114,7 @@ fun NearbyStopsMapView(
     AndroidView(
         factory = { ctx ->
             MapView(ctx).apply {
-                setTileSource(TileSourceFactory.MAPNIK)
+                setTileSource(CARTO_DARK_MATTER)
                 setMultiTouchControls(true)
                 controller.setZoom(16.5)
                 controller.setCenter(GeoPoint(userLat ?: BRISBANE_LAT, userLon ?: BRISBANE_LON))
@@ -143,26 +155,18 @@ private fun createMarkerIcon(context: android.content.Context, group: StopGroup)
     // Drop shadow
     canvas.drawCircle(size / 2f, size / 2f + dp, size / 2f - 2 * dp,
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = AndroidColor.argb(40, 0, 0, 0)
+            color = AndroidColor.argb(80, 0, 0, 0)
             style = Paint.Style.FILL
         })
 
-    // White fill
+    // Coloured fill (solid, for good contrast on dark map)
     canvas.drawCircle(size / 2f, size / 2f, size / 2f - 2 * dp,
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = AndroidColor.WHITE
+            color = pinColor
             style = Paint.Style.FILL
         })
 
-    // Coloured border
-    canvas.drawCircle(size / 2f, size / 2f, size / 2f - 3f * dp,
-        Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = pinColor
-            style = Paint.Style.STROKE
-            strokeWidth = 3f * dp
-        })
-
-    // Vehicle type initial letter
+    // Vehicle type initial letter — white for contrast on coloured fill
     val label = when (group.primaryType) {
         VehicleType.Bus   -> "B"
         VehicleType.Rail  -> "T"
@@ -170,7 +174,7 @@ private fun createMarkerIcon(context: android.content.Context, group: StopGroup)
         VehicleType.Tram  -> "Tm"
     }
     val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = pinColor
+        color = AndroidColor.WHITE
         textSize = 13f * dp
         textAlign = Paint.Align.CENTER
         typeface = Typeface.DEFAULT_BOLD
