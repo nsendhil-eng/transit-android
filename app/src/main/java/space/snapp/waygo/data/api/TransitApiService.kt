@@ -10,6 +10,7 @@ import space.snapp.waygo.data.api.models.Departure
 import space.snapp.waygo.data.api.models.RouteShape
 import space.snapp.waygo.data.api.models.SearchResponse
 import space.snapp.waygo.data.api.models.Stop
+import space.snapp.waygo.data.api.models.VehiclePosition
 
 interface TransitApiService {
 
@@ -39,6 +40,13 @@ interface TransitApiService {
         @Query("lat") lat: Double,
         @Query("lon") lon: Double
     ): List<RouteShape>
+
+    @GET("/api/vehicles-near-me")
+    suspend fun vehiclesNearMe(
+        @Query("lat") lat: Double,
+        @Query("lon") lon: Double,
+        @Query("radius") radius: Int = 1000
+    ): List<VehiclePosition>
 
     companion object {
         val instance: TransitApiService by lazy {
