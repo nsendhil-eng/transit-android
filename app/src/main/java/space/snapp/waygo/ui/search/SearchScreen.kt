@@ -25,6 +25,8 @@ import space.snapp.waygo.ui.departures.DeparturesViewModel
 import space.snapp.waygo.ui.favorites.AddFavouriteSheet
 import space.snapp.waygo.ui.favorites.FavoritesViewModel
 import space.snapp.waygo.ui.map.NearbyStopsMapView
+import space.snapp.waygo.ui.plan.PlanCard
+import space.snapp.waygo.ui.plan.PlanViewModel
 import space.snapp.waygo.ui.tripdetail.TripDetailArgs
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -33,6 +35,7 @@ fun SearchScreen(
     viewModel: SearchViewModel,
     departuresVM: DeparturesViewModel,
     favoritesVM: FavoritesViewModel,
+    planViewModel: PlanViewModel,
     userLat: Double?,
     userLon: Double?,
     onTripSelected: (TripDetailArgs) -> Unit = {}
@@ -46,6 +49,7 @@ fun SearchScreen(
 
     var showSaveSheet by remember { mutableStateOf(false) }
     var stopsForSaving by remember { mutableStateOf<List<Stop>>(emptyList()) }
+    var inPlanMode by remember { mutableStateOf(false) }
 
     // White — high contrast against dark map
     val searchBarBg = Color.White
@@ -80,44 +84,61 @@ fun SearchScreen(
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
 
-            // Floating search bar
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = searchBarBg,
-                shadowElevation = 10.dp,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = viewModel::onQueryChange,
-                    placeholder = {
-                        Text("Stop name, route, suburb...", color = searchBarHint)
-                    },
-                    leadingIcon = {
-                        Icon(Icons.Default.Search, contentDescription = null, tint = searchBarIcon)
-                    },
-                    trailingIcon = {
-                        if (query.isNotEmpty()) {
-                            IconButton(onClick = { viewModel.onQueryChange("") }) {
-                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = searchBarIcon)
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedTextColor = searchBarText,
-                        focusedTextColor = searchBarText,
-                    ),
-                    modifier = Modifier.fillMaxWidth()
+            // Floating search bar OR plan mode card
+            if (inPlanMode) {
+                PlanCard(
+                    viewModel = planViewModel,
+                    userLat = userLat,
+                    userLon = userLon,
+                    onClose = { inPlanMode = false; planViewModel.reset() }
                 )
+            } else {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = searchBarBg,
+                    shadowElevation = 10.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = viewModel::onQueryChange,
+                        placeholder = {
+                            Text("Stop name, route, suburb...", color = searchBarHint)
+                        },
+                        leadingIcon = {
+                            Icon(Icons.Default.Search, contentDescription = null, tint = searchBarIcon)
+                        },
+                        trailingIcon = {
+                            if (query.isNotEmpty()) {
+                                IconButton(onClick = { viewModel.onQueryChange("") }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Clear", tint = searchBarIcon)
+                                }
+                            } else {
+                                IconButton(onClick = { inPlanMode = true }) {
+                                    Icon(
+                                        Icons.Default.Directions,
+                                        contentDescription = "Plan a journey",
+                                        tint = searchBarIcon
+                                    )
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedTextColor = searchBarText,
+                            focusedTextColor = searchBarText,
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
 
-            // Selected stops chips
-            if (selectedStops.isNotEmpty()) {
+            // Selected stops chips (hidden in plan mode)
+            if (!inPlanMode && selectedStops.isNotEmpty()) {
                 Spacer(Modifier.height(6.dp))
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -190,9 +211,9 @@ fun SearchScreen(
                 }
             }
 
-            // Content panel — sits above the map
+            // Content panel — sits above the map (hidden in plan mode, PlanCard manages its own content)
             val trimmed = query.trim()
-            when {
+            if (!inPlanMode) when {
                 trimmed.length >= 2 -> {
                     Spacer(Modifier.height(6.dp))
                     Surface(
