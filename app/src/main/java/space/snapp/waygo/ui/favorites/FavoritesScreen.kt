@@ -13,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import space.snapp.waygo.data.api.models.Departure
 import space.snapp.waygo.data.models.FavoriteStop
 import space.snapp.waygo.ui.departures.DeparturesScreen
 import space.snapp.waygo.ui.departures.DeparturesViewModel
@@ -22,7 +23,8 @@ import space.snapp.waygo.ui.departures.DeparturesViewModel
 fun FavoritesScreen(
     viewModel: FavoritesViewModel,
     userLat: Double?,
-    userLon: Double?
+    userLon: Double?,
+    onDepartureClick: ((Departure) -> Unit)? = null
 ) {
     val favorites by viewModel.favorites.collectAsState()
     var selectedFavorite by remember { mutableStateOf<FavoriteStop?>(null) }
@@ -70,7 +72,12 @@ fun FavoritesScreen(
                 }
                 HorizontalDivider()
                 Box(modifier = Modifier.fillMaxWidth().height(500.dp)) {
-                    DeparturesScreen(viewModel = departuresVM, stops = fav.stops, getOffStopId = fav.getOffStopId)
+                    DeparturesScreen(
+                        viewModel = departuresVM,
+                        stops = fav.stops,
+                        getOffStopId = fav.getOffStopId,
+                        onDepartureClick = onDepartureClick
+                    )
                 }
             }
         }

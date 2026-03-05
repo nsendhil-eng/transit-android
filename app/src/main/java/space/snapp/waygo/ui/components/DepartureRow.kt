@@ -1,6 +1,7 @@
 package space.snapp.waygo.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,7 +22,7 @@ import kotlinx.coroutines.delay
 import space.snapp.waygo.data.api.models.Departure
 
 @Composable
-fun DepartureRow(departure: Departure) {
+fun DepartureRow(departure: Departure, onClick: (() -> Unit)? = null) {
     // Live countdown — ticks every second
     var liveSeconds by remember { mutableIntStateOf(departure.liveSeconds) }
     LaunchedEffect(departure.id) {
@@ -48,6 +49,7 @@ fun DepartureRow(departure: Departure) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

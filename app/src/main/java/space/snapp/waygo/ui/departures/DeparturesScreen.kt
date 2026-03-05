@@ -17,13 +17,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import space.snapp.waygo.data.api.models.Departure
 import space.snapp.waygo.data.api.models.Stop
 
 @Composable
 fun DeparturesScreen(
     viewModel: DeparturesViewModel,
     stops: List<Stop>,
-    getOffStopId: String? = null
+    getOffStopId: String? = null,
+    onDepartureClick: ((Departure) -> Unit)? = null
 ) {
     val departures by viewModel.departures.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -92,7 +94,10 @@ fun DeparturesScreen(
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     val filtered = viewModel.filteredDepartures
                     items(filtered, key = { it.id }) { dep ->
-                        space.snapp.waygo.ui.components.DepartureRow(dep)
+                        space.snapp.waygo.ui.components.DepartureRow(
+                            departure = dep,
+                            onClick = onDepartureClick?.let { cb -> { cb(dep) } }
+                        )
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     }
                 }

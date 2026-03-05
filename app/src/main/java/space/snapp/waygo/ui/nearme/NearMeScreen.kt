@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import space.snapp.waygo.data.api.models.Departure
 import space.snapp.waygo.data.api.models.VehicleType
 import space.snapp.waygo.ui.components.icon
 import space.snapp.waygo.ui.departures.DeparturesScreen
@@ -28,7 +29,8 @@ fun NearMeScreen(
     hasLocationPermission: Boolean,
     userLat: Double?,
     userLon: Double?,
-    onRequestPermission: () -> Unit
+    onRequestPermission: () -> Unit,
+    onDepartureClick: ((Departure) -> Unit)? = null
 ) {
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
@@ -167,7 +169,11 @@ fun NearMeScreen(
                             }
                             HorizontalDivider()
                         }
-                        DeparturesScreen(viewModel = depsVM, stops = stops)
+                        DeparturesScreen(
+                            viewModel = depsVM,
+                            stops = stops,
+                            onDepartureClick = onDepartureClick
+                        )
                     }
                 }
             }

@@ -7,10 +7,12 @@ import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
 import retrofit2.http.Query
 import space.snapp.waygo.data.api.models.Departure
+import space.snapp.waygo.data.api.models.NextTripsResponse
 import space.snapp.waygo.data.api.models.RouteShape
 import space.snapp.waygo.data.api.models.SearchResponse
 import space.snapp.waygo.data.api.models.Stop
 import space.snapp.waygo.data.api.models.StopLiveResponse
+import space.snapp.waygo.data.api.models.TripDetailResponse
 import space.snapp.waygo.data.api.models.VehiclePosition
 
 interface TransitApiService {
@@ -53,6 +55,22 @@ interface TransitApiService {
     suspend fun stopLive(
         @Query("stop_ids") stopIds: String
     ): StopLiveResponse
+
+    @GET("/api/trip-stops")
+    suspend fun tripStops(
+        @Query("trip_id") tripId: String? = null,
+        @Query("route_id") routeId: String? = null,
+        @Query("direction_id") directionId: Int? = null,
+        @Query("user_lat") userLat: Double? = null,
+        @Query("user_lon") userLon: Double? = null
+    ): TripDetailResponse
+
+    @GET("/api/next-trips")
+    suspend fun nextTrips(
+        @Query("route_id") routeId: String,
+        @Query("direction_id") directionId: Int,
+        @Query("stop_id") stopId: String
+    ): NextTripsResponse
 
     companion object {
         val instance: TransitApiService by lazy {

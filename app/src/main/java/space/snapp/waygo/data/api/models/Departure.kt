@@ -10,6 +10,7 @@ data class Departure(
     val stopName: String,
     val vehicleType: String,
     val routeNumber: String,
+    val routeId: String = "",
     val headsign: String,
     val directionId: Int,
     val scheduledDepartureUtc: String,

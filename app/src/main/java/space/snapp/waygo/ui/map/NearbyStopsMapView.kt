@@ -30,6 +30,7 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
 import space.snapp.waygo.data.api.TransitApiService
+import space.snapp.waygo.data.api.models.Departure
 import space.snapp.waygo.data.api.models.Stop
 import space.snapp.waygo.data.api.models.TripLive
 import space.snapp.waygo.data.api.models.VehicleType
@@ -57,7 +58,8 @@ private val CARTO_DARK_MATTER = XYTileSource(
 fun NearbyStopsMapView(
     userLat: Double?,
     userLon: Double?,
-    onAddStops: (List<Stop>) -> Unit
+    onAddStops: (List<Stop>) -> Unit,
+    onDepartureClick: ((Departure) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -162,13 +164,6 @@ fun NearbyStopsMapView(
             map.overlays.add(marker)
         }
 
-        // Re-lock the static map
-        val lat = userLat ?: BRISBANE_LAT
-        val lon = userLon ?: BRISBANE_LON
-        val delta = 0.001
-        map.setScrollableAreaLimitLatitude(lat + delta, lat - delta, 0)
-        map.setScrollableAreaLimitLongitude(lon - delta, lon + delta, 0)
-        map.controller.setCenter(GeoPoint(lat, lon))
         map.invalidate()
     }
 
@@ -188,8 +183,7 @@ fun NearbyStopsMapView(
         factory = { ctx ->
             MapView(ctx).apply {
                 setTileSource(CARTO_DARK_MATTER)
-                setMultiTouchControls(false)
-                isFocusable = false
+                setMultiTouchControls(true)
                 controller.setZoom(16.5)
                 controller.setCenter(GeoPoint(userLat ?: BRISBANE_LAT, userLon ?: BRISBANE_LON))
             }.also { mapRef.value = it }
@@ -208,7 +202,8 @@ fun NearbyStopsMapView(
                 onAddStops = { stops ->
                     onAddStops(stops)
                     selectedGroupState.value = null
-                }
+                },
+                onDepartureClick = onDepartureClick
             )
         }
     }
@@ -336,7 +331,11 @@ private fun VehicleType.pinColorCompose() = when (this) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun StopGroupSheet(group: StopGroup, onAddStops: (List<Stop>) -> Unit) {
+private fun StopGroupSheet(
+    group: StopGroup,
+    onAddStops: (List<Stop>) -> Unit,
+    onDepartureClick: ((Departure) -> Unit)? = null
+) {
     val depsVM = remember(group.id) { DeparturesViewModel() }
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -376,7 +375,11 @@ private fun StopGroupSheet(group: StopGroup, onAddStops: (List<Stop>) -> Unit) {
         }
         HorizontalDivider()
         Box(modifier = Modifier.height(320.dp)) {
-            DeparturesScreen(viewModel = depsVM, stops = group.stops)
+            DeparturesScreen(
+                viewModel = depsVM,
+                stops = group.stops,
+                onDepartureClick = onDepartureClick
+            )
         }
     }
 }

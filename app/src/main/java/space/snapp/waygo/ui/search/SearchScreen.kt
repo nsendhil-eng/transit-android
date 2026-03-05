@@ -1,5 +1,6 @@
 package space.snapp.waygo.ui.search
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import space.snapp.waygo.data.api.models.Departure
 import space.snapp.waygo.data.api.models.Stop
 import space.snapp.waygo.data.models.FavoriteStop
 import space.snapp.waygo.ui.components.StopRow
@@ -23,6 +25,7 @@ import space.snapp.waygo.ui.departures.DeparturesViewModel
 import space.snapp.waygo.ui.favorites.AddFavouriteSheet
 import space.snapp.waygo.ui.favorites.FavoritesViewModel
 import space.snapp.waygo.ui.map.NearbyStopsMapView
+import space.snapp.waygo.ui.tripdetail.TripDetailArgs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,7 +34,8 @@ fun SearchScreen(
     departuresVM: DeparturesViewModel,
     favoritesVM: FavoritesViewModel,
     userLat: Double?,
-    userLon: Double?
+    userLon: Double?,
+    onTripSelected: (TripDetailArgs) -> Unit = {}
 ) {
     val query by viewModel.query.collectAsState()
     val results by viewModel.results.collectAsState()
@@ -55,7 +59,18 @@ fun SearchScreen(
         NearbyStopsMapView(
             userLat = userLat,
             userLon = userLon,
-            onAddStops = { stops -> stops.forEach { viewModel.addStop(it) } }
+            onAddStops = { stops -> stops.forEach { viewModel.addStop(it) } },
+            onDepartureClick = { dep ->
+                onTripSelected(
+                    TripDetailArgs(
+                        tripId = dep.tripId,
+                        routeId = dep.routeId,
+                        directionId = dep.directionId,
+                        routeShortName = dep.routeNumber,
+                        headsign = dep.headsign
+                    )
+                )
+            }
         )
 
         // ── Overlay UI ──────────────────────────────────────────────────
@@ -255,6 +270,17 @@ fun SearchScreen(
                                                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                                     )
                                                 }
+                                            },
+                                            modifier = Modifier.clickable {
+                                                onTripSelected(
+                                                    TripDetailArgs(
+                                                        tripId = null,
+                                                        routeId = route.routeId,
+                                                        directionId = route.directionId ?: 0,
+                                                        routeShortName = route.routeShortName,
+                                                        headsign = route.tripHeadsign ?: route.routeLongName
+                                                    )
+                                                )
                                             }
                                         )
                                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
@@ -275,7 +301,21 @@ fun SearchScreen(
                         color = MaterialTheme.colorScheme.surface,
                         shadowElevation = 10.dp
                     ) {
-                        DeparturesScreen(viewModel = departuresVM, stops = selectedStops)
+                        DeparturesScreen(
+                            viewModel = departuresVM,
+                            stops = selectedStops,
+                            onDepartureClick = { dep ->
+                                onTripSelected(
+                                    TripDetailArgs(
+                                        tripId = dep.tripId,
+                                        routeId = dep.routeId,
+                                        directionId = dep.directionId,
+                                        routeShortName = dep.routeNumber,
+                                        headsign = dep.headsign
+                                    )
+                                )
+                            }
+                        )
                     }
                 }
 

@@ -12,5 +12,5 @@ data class Route(
     @SerializedName("direction_id") val directionId: Int?,
     @SerializedName("route_type") val routeType: Int?
 ) {
-    val id: String get() = "$routeId-${directionId ?: -1}"
+    val id: String get() = "$routeId-${tripHeadsign ?: ""}-${directionId ?: -1}"
 }
