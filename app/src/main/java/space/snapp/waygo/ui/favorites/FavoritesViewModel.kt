@@ -4,10 +4,13 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import space.snapp.waygo.data.api.TransitApiService
+import space.snapp.waygo.data.api.models.Departure
 import space.snapp.waygo.data.api.models.Stop
 import space.snapp.waygo.data.local.FavoritesRepository
 import space.snapp.waygo.data.models.FavoriteStop
@@ -18,10 +21,43 @@ class FavoritesViewModel(private val repo: FavoritesRepository) : ViewModel() {
     private val _favorites = MutableStateFlow<List<FavoriteStop>>(emptyList())
     val favorites = _favorites.asStateFlow()
 
+    // Departures for all favourites, keyed by stop_id — refreshed every 10 s
+    private val _favDepartures = MutableStateFlow<Map<String, List<Departure>>>(emptyMap())
+    val favDepartures = _favDepartures.asStateFlow()
+
+    private var pollingJob: Job? = null
+
     init {
         viewModelScope.launch {
             repo.favoriteStops.collect { _favorites.value = it }
         }
+    }
+
+    fun startDeparturePolling() {
+        pollingJob?.cancel()
+        pollingJob = viewModelScope.launch {
+            while (true) {
+                fetchAllDepartures()
+                delay(10_000)
+            }
+        }
+    }
+
+    fun stopDeparturePolling() { pollingJob?.cancel() }
+
+    private suspend fun fetchAllDepartures() {
+        val codes = _favorites.value
+            .flatMap { it.stops }
+            .mapNotNull { it.stopCode }
+            .distinct()
+        if (codes.isEmpty()) return
+        runCatching { api.departures(codes.joinToString(","), perStop = 3) }
+            .onSuccess { deps -> _favDepartures.value = deps.groupBy { it.stopId } }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        stopDeparturePolling()
     }
 
     fun saveFavorite(fav: FavoriteStop) {

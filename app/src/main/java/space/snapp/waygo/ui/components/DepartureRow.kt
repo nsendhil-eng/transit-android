@@ -23,14 +23,16 @@ import space.snapp.waygo.data.api.models.Departure
 
 @Composable
 fun DepartureRow(departure: Departure, onClick: (() -> Unit)? = null) {
-    // Live countdown — ticks every second
-    var liveSeconds by remember { mutableIntStateOf(departure.liveSeconds) }
-    LaunchedEffect(departure.id) {
+    // Tick wall clock every second so countdown always reflects the latest
+    // departure object (including real-time delay updates on refresh).
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
         while (true) {
             delay(1000)
-            liveSeconds = departure.liveSeconds
+            now = System.currentTimeMillis()
         }
     }
+    val liveSeconds = ((departure.departureDate.time - now) / 1000).toInt()
 
     val countdownText = when {
         liveSeconds < 60 -> "Now"

@@ -23,7 +23,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.os.Looper
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import space.snapp.waygo.data.api.models.Departure
 import space.snapp.waygo.ui.departures.DeparturesViewModel
 import space.snapp.waygo.ui.favorites.FavoritesViewModel
@@ -79,13 +84,24 @@ fun WayGoApp() {
                 perms[Manifest.permission.ACCESS_COARSE_LOCATION] == true
     }
 
-    LaunchedEffect(hasLocationPermission) {
-        if (hasLocationPermission) {
-            val client = LocationServices.getFusedLocationProviderClient(context)
-            client.lastLocation.addOnSuccessListener { loc ->
-                loc?.let { userLat = it.latitude; userLon = it.longitude }
+    // Request an immediate fix then keep updating every 10 s while the app is open
+    DisposableEffect(hasLocationPermission) {
+        if (!hasLocationPermission) return@DisposableEffect onDispose {}
+        val client = LocationServices.getFusedLocationProviderClient(context)
+        // Immediate best-effort fix from cache
+        client.lastLocation.addOnSuccessListener { loc ->
+            loc?.let { userLat = it.latitude; userLon = it.longitude }
+        }
+        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10_000L)
+            .setMinUpdateIntervalMillis(5_000L)
+            .build()
+        val callback = object : LocationCallback() {
+            override fun onLocationResult(result: LocationResult) {
+                result.lastLocation?.let { userLat = it.latitude; userLon = it.longitude }
             }
         }
+        client.requestLocationUpdates(request, callback, Looper.getMainLooper())
+        onDispose { client.removeLocationUpdates(callback) }
     }
 
     // ViewModels

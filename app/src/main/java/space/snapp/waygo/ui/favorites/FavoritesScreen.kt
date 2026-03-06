@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import space.snapp.waygo.data.api.models.Departure
@@ -27,9 +28,14 @@ fun FavoritesScreen(
     onDepartureClick: ((Departure) -> Unit)? = null
 ) {
     val favorites by viewModel.favorites.collectAsState()
+    val favDepartures by viewModel.favDepartures.collectAsState()
     var selectedFavorite by remember { mutableStateOf<FavoriteStop?>(null) }
     var editingFavorite by remember { mutableStateOf<FavoriteStop?>(null) }
     val departuresVM = remember { DeparturesViewModel() }
+
+    // Start/stop polling departures for all favourites while this screen is visible
+    LaunchedEffect(Unit) { viewModel.startDeparturePolling() }
+    DisposableEffect(Unit) { onDispose { viewModel.stopDeparturePolling() } }
 
     if (favorites.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -46,8 +52,14 @@ fun FavoritesScreen(
     } else {
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             items(favorites, key = { it.id }) { fav ->
+                val preview = favDepartures
+                    .filter { (stopId, _) -> fav.stops.any { it.id == stopId } }
+                    .values.flatten()
+                    .sortedBy { it.liveSeconds }
+                    .take(2)
                 FavoriteCard(
                     favorite = fav,
+                    previewDepartures = preview,
                     onTap = { selectedFavorite = fav },
                     onEdit = { editingFavorite = fav },
                     onDelete = { viewModel.deleteFavorite(fav) }
@@ -104,6 +116,7 @@ fun FavoritesScreen(
 @Composable
 fun FavoriteCard(
     favorite: FavoriteStop,
+    previewDepartures: List<Departure> = emptyList(),
     onTap: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
@@ -135,7 +148,7 @@ fun FavoriteCard(
                 )
             },
             supportingContent = {
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
                         favorite.stops.joinToString(" · ") { it.name },
                         style = MaterialTheme.typography.bodySmall,
@@ -148,6 +161,39 @@ fun FavoriteCard(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary
                         )
+                    }
+                    if (previewDepartures.isNotEmpty()) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            previewDepartures.forEach { dep ->
+                                val bgColor = dep.routeColorInt?.let { Color(it) }
+                                    ?: MaterialTheme.colorScheme.primary
+                                val txtColor = dep.routeTextColorInt?.let { Color(it) }
+                                    ?: MaterialTheme.colorScheme.onPrimary
+                                Surface(
+                                    color = bgColor,
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        dep.routeNumber,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = txtColor,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                                Text(
+                                    dep.countdownText,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                    color = when {
+                                        dep.liveSeconds < 120 -> MaterialTheme.colorScheme.error
+                                        dep.liveSeconds < 300 -> Color(0xFFE65100)
+                                        else -> MaterialTheme.colorScheme.onSurface
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             },
