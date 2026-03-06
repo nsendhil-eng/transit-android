@@ -3,9 +3,12 @@ package space.snapp.waygo.ui.tripdetail
 import android.graphics.Bitmap
 import android.graphics.Canvas as AndroidCanvas
 import android.graphics.Color as AndroidColor
+import android.graphics.DashPathEffect
 import android.graphics.Paint
+import android.graphics.Path as AndroidPath
 import android.graphics.drawable.BitmapDrawable
 import androidx.activity.compose.BackHandler
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -93,11 +96,11 @@ fun TripDetailScreen(
     }
     val routeComposeColor = Color(routeColorInt)
 
-    // Update map overlays when trip detail changes
-    LaunchedEffect(tripDetail) {
+    // Update map overlays when trip detail or user location changes
+    LaunchedEffect(tripDetail, userLat, userLon) {
         val map = mapRef.value ?: return@LaunchedEffect
         val detail = tripDetail ?: return@LaunchedEffect
-        rebuildTripMap(context, map, detail, routeColorInt)
+        rebuildTripMap(context, map, detail, routeColorInt, userLat, userLon)
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -281,6 +284,24 @@ private fun TripChip(
 
 @Composable
 private fun TripStopRow(stop: TripStop, routeColor: Color) {
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) { delay(1000); now = System.currentTimeMillis() }
+    }
+    val liveSeconds = ((stop.departureDate.time - now) / 1000).toInt()
+    val timeText = when {
+        !stop.isUpcoming -> stop.scheduledTime
+        liveSeconds < 60 -> "Now"
+        liveSeconds < 3600 -> "${liveSeconds / 60} min"
+        else -> "${liveSeconds / 3600}h ${(liveSeconds % 3600) / 60}m"
+    }
+    val timeColor = when {
+        !stop.isUpcoming -> MaterialTheme.colorScheme.onSurfaceVariant
+        liveSeconds < 120 -> MaterialTheme.colorScheme.error
+        liveSeconds < 300 -> Color(0xFFE65100)
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
     val dotColor = when {
         stop.isNearest -> routeColor
         stop.isUpcoming -> Color.White
@@ -327,9 +348,9 @@ private fun TripStopRow(stop: TripStop, routeColor: Color) {
                 maxLines = 1
             )
             Text(
-                stop.scheduledTime,
+                timeText,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = timeColor
             )
         }
 
@@ -351,7 +372,9 @@ private fun rebuildTripMap(
     context: android.content.Context,
     map: MapView,
     detail: TripDetailResponse,
-    routeColorInt: Int
+    routeColorInt: Int,
+    userLat: Double?,
+    userLon: Double?
 ) {
     val dp = context.resources.displayMetrics.density
     map.overlays.clear()
@@ -366,6 +389,42 @@ private fun rebuildTripMap(
         map.overlays.add(poly)
     }
 
+    // Walking route to nearest stop (if user location is known and ≤ 1km away)
+    val nearestStop = detail.stops.firstOrNull { it.isNearest }
+    if (nearestStop != null && userLat != null && userLon != null) {
+        val walkMeters = haversineMeters(userLat, userLon, nearestStop.lat, nearestStop.lon)
+        if (walkMeters <= 1000.0) {
+            val walkPoly = Polyline().apply {
+                setPoints(listOf(GeoPoint(userLat, userLon), GeoPoint(nearestStop.lat, nearestStop.lon)))
+                outlinePaint.color = AndroidColor.rgb(100, 180, 255)
+                outlinePaint.strokeWidth = 3f * dp
+                outlinePaint.pathEffect = DashPathEffect(floatArrayOf(18f * dp, 10f * dp), 0f)
+            }
+            map.overlays.add(walkPoly)
+
+            // Walk time label at midpoint
+            val midLat = (userLat + nearestStop.lat) / 2
+            val midLon = (userLon + nearestStop.lon) / 2
+            val walkMins = (walkMeters / 80).toInt().coerceAtLeast(1)
+            val walkLabel = Marker(map).apply {
+                position = GeoPoint(midLat, midLon)
+                icon = createWalkLabel(context, "$walkMins min walk")
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                setInfoWindow(null)
+            }
+            map.overlays.add(walkLabel)
+
+            // User location dot
+            val userMarker = Marker(map).apply {
+                position = GeoPoint(userLat, userLon)
+                icon = createUserDotIcon(context)
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                setInfoWindow(null)
+            }
+            map.overlays.add(userMarker)
+        }
+    }
+
     // Stop markers
     for (stop in detail.stops) {
         val marker = Marker(map).apply {
@@ -376,6 +435,17 @@ private fun rebuildTripMap(
             setInfoWindow(null)
         }
         map.overlays.add(marker)
+    }
+
+    // Vehicle position marker
+    detail.vehicle?.let { v ->
+        val vehicleMarker = Marker(map).apply {
+            position = GeoPoint(v.lat, v.lon)
+            icon = createTripVehicleIcon(context, routeColorInt, v.bearing)
+            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+            setInfoWindow(null)
+        }
+        map.overlays.add(vehicleMarker)
     }
 
     // Auto-fit to upcoming stops
@@ -401,6 +471,106 @@ private fun rebuildTripMap(
     }
 
     map.invalidate()
+}
+
+private fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+    val r = 6371000.0
+    val dLat = Math.toRadians(lat2 - lat1)
+    val dLon = Math.toRadians(lon2 - lon1)
+    val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2)
+    return r * 2 * Math.asin(Math.sqrt(a))
+}
+
+private fun createUserDotIcon(context: android.content.Context): BitmapDrawable {
+    val dp = context.resources.displayMetrics.density
+    val size = (20 * dp).toInt().coerceAtLeast(8)
+    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = AndroidCanvas(bitmap)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    // Halo
+    paint.color = AndroidColor.argb(70, 33, 150, 243)
+    paint.style = Paint.Style.FILL
+    canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint)
+    // Inner dot
+    paint.color = AndroidColor.rgb(33, 150, 243)
+    canvas.drawCircle(size / 2f, size / 2f, size / 3.5f, paint)
+    // White border
+    paint.color = AndroidColor.WHITE
+    paint.style = Paint.Style.STROKE
+    paint.strokeWidth = 1.5f * dp
+    canvas.drawCircle(size / 2f, size / 2f, size / 3.5f, paint)
+    return BitmapDrawable(context.resources, bitmap)
+}
+
+private fun createWalkLabel(context: android.content.Context, text: String): BitmapDrawable {
+    val dp = context.resources.displayMetrics.density
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = 11f * dp
+        color = AndroidColor.WHITE
+        typeface = android.graphics.Typeface.DEFAULT_BOLD
+    }
+    val textWidth = paint.measureText(text)
+    val padH = 6f * dp
+    val padV = 4f * dp
+    val w = (textWidth + padH * 2).toInt().coerceAtLeast(1)
+    val h = (paint.textSize + padV * 2).toInt().coerceAtLeast(1)
+    val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+    val canvas = AndroidCanvas(bitmap)
+    val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = AndroidColor.argb(200, 30, 100, 200)
+        style = Paint.Style.FILL
+    }
+    canvas.drawRoundRect(0f, 0f, w.toFloat(), h.toFloat(), 6f * dp, 6f * dp, bgPaint)
+    canvas.drawText(text, padH, h - padV - paint.descent(), paint)
+    return BitmapDrawable(context.resources, bitmap)
+}
+
+private fun createTripVehicleIcon(
+    context: android.content.Context,
+    routeColorInt: Int,
+    bearing: Float
+): BitmapDrawable {
+    val dp = context.resources.displayMetrics.density
+    val size = (34 * dp).toInt().coerceAtLeast(8)
+    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = AndroidCanvas(bitmap)
+    val cx = size / 2f
+    val cy = size / 2f
+    val radius = size / 2f - 2f * dp
+
+    // Filled circle
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = routeColorInt
+        style = Paint.Style.FILL
+    }
+    canvas.drawCircle(cx, cy, radius, paint)
+
+    // White border
+    paint.color = AndroidColor.WHITE
+    paint.style = Paint.Style.STROKE
+    paint.strokeWidth = 2f * dp
+    canvas.drawCircle(cx, cy, radius, paint)
+
+    // Bearing arrow
+    canvas.save()
+    canvas.rotate(bearing, cx, cy)
+    val arrowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = AndroidColor.WHITE
+        style = Paint.Style.FILL
+    }
+    val arrowPath = AndroidPath().apply {
+        val half = radius * 0.32f
+        moveTo(cx, cy - radius * 0.72f)        // tip (north before rotation)
+        lineTo(cx - half, cy - radius * 0.05f)  // left
+        lineTo(cx + half, cy - radius * 0.05f)  // right
+        close()
+    }
+    canvas.drawPath(arrowPath, arrowPaint)
+    canvas.restore()
+
+    return BitmapDrawable(context.resources, bitmap)
 }
 
 private fun createTripStopIcon(

@@ -203,7 +203,10 @@ fun NearbyStopsMapView(
                     onAddStops(stops)
                     selectedGroupState.value = null
                 },
-                onDepartureClick = onDepartureClick
+                onDepartureClick = { dep ->
+                    selectedGroupState.value = null
+                    onDepartureClick?.invoke(dep)
+                }
             )
         }
     }

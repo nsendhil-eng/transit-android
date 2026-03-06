@@ -88,7 +88,10 @@ fun FavoritesScreen(
                         viewModel = departuresVM,
                         stops = fav.stops,
                         getOffStopId = fav.getOffStopId,
-                        onDepartureClick = onDepartureClick
+                        onDepartureClick = { dep ->
+                            selectedFavorite = null
+                            onDepartureClick?.invoke(dep)
+                        }
                     )
                 }
             }
