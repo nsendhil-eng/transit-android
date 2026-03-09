@@ -24,7 +24,12 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.text.font.FontWeight
 import space.snapp.waygo.data.api.models.AddressResult
+import space.snapp.waygo.data.api.models.Itinerary
+import space.snapp.waygo.data.api.models.ItineraryLeg
 import space.snapp.waygo.ui.plan.PlanViewModel.ActiveField
 
 @Composable
@@ -41,6 +46,9 @@ fun PlanCard(
     val suggestions by viewModel.suggestions.collectAsState()
     val activeField by viewModel.activeField.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
+    val itineraries by viewModel.itineraries.collectAsState()
+    val isPlanning by viewModel.isPlanning.collectAsState()
+    val planError by viewModel.planError.collectAsState()
 
     val fromFocusRequester = remember { FocusRequester() }
     val toFocusRequester = remember { FocusRequester() }
@@ -271,46 +279,183 @@ fun PlanCard(
             }
         }
 
-        // ── Both endpoints selected — ready for Phase 2 routing ──────────
+        // ── Journey results ───────────────────────────────────────────────
         if (fromSelected != null && toSelected != null && suggestions.isEmpty()) {
             Spacer(Modifier.height(8.dp))
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surface,
-                shadowElevation = 8.dp,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
+            when {
+                isPlanning -> Box(
                     modifier = Modifier.fillMaxWidth().padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    contentAlignment = Alignment.Center
+                ) { CircularProgressIndicator() }
+
+                planError != null -> Box(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        Icons.Default.Directions,
-                        contentDescription = null,
-                        modifier = Modifier.size(48.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(Modifier.height(12.dp))
+                    Text(planError!!, color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium)
+                }
+
+                itineraries.isNotEmpty() -> {
+                    var expandedIndex by remember { mutableStateOf<Int?>(0) }
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        itineraries.forEachIndexed { index, itinerary ->
+                            ItineraryCard(
+                                itinerary = itinerary,
+                                isExpanded = expandedIndex == index,
+                                onTap = { expandedIndex = if (expandedIndex == index) null else index }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ItineraryCard(itinerary: Itinerary, isExpanded: Boolean, onTap: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 6.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.clickable(onClick = onTap).padding(16.dp)) {
+            // Summary row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Mode chips
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    itinerary.legs.forEach { leg ->
+                        if (leg.isTransit) {
+                            val bgColor = leg.routeColor?.let {
+                                runCatching { Color(android.graphics.Color.parseColor("#$it")) }.getOrNull()
+                            } ?: MaterialTheme.colorScheme.primary
+                            Surface(color = bgColor, shape = RoundedCornerShape(6.dp)) {
+                                Text(
+                                    leg.routeShortName ?: leg.mode,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        } else if (leg.mode == "WALK") {
+                            Icon(Icons.Default.DirectionsWalk, contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        if (itinerary.legs.last() != leg) {
+                            Icon(Icons.Default.ChevronRight, contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+                // Total time
+                Text(
+                    "${itinerary.durationMins} min",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            // Subtitle: walk distance + transfers
+            val walkKm = itinerary.walkDistance / 1000f
+            val walkText = if (walkKm < 1f) "${itinerary.walkDistance}m walk" else "${"%.1f".format(walkKm)}km walk"
+            val transferText = when (itinerary.transfers) {
+                0 -> "No transfers"
+                1 -> "1 transfer"
+                else -> "${itinerary.transfers} transfers"
+            }
+            Text(
+                "$walkText · $transferText",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+
+            // Expanded leg details
+            if (isExpanded) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    itinerary.legs.forEach { leg -> LegRow(leg) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LegRow(leg: ItineraryLeg) {
+    Row(verticalAlignment = Alignment.Top) {
+        // Mode icon
+        Box(
+            modifier = Modifier.size(32.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            if (leg.isTransit) {
+                val bgColor = leg.routeColor?.let {
+                    runCatching { Color(android.graphics.Color.parseColor("#$it")) }.getOrNull()
+                } ?: MaterialTheme.colorScheme.primary
+                Surface(color = bgColor, shape = RoundedCornerShape(6.dp)) {
                     Text(
-                        "Route planning coming soon",
-                        style = MaterialTheme.typography.titleMedium
+                        leg.routeShortName ?: leg.mode,
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                     )
-                    Spacer(Modifier.height(4.dp))
+                }
+            } else {
+                Icon(Icons.Default.DirectionsWalk, contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            if (leg.isTransit) {
+                Text(
+                    "${leg.headsign ?: leg.routeLongName ?: leg.mode}",
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                    maxLines = 1
+                )
+                Text(
+                    "${leg.from.name} → ${leg.to.name}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            } else {
+                val distText = if (leg.distance < 1000) "${leg.distance}m" else "${"%.1f".format(leg.distance / 1000f)}km"
+                Text(
+                    "Walk $distText (${leg.durationMins} min)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (leg.steps.isNotEmpty()) {
                     Text(
-                        "From: ${fromSelected!!.shortName}\nTo: ${toSelected!!.shortName}",
+                        leg.steps.first().streetName.ifBlank { "path" },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        "OTP integration (walk + bus + train + ferry) coming in Phase 2",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
                     )
                 }
             }
         }
+        // Duration
+        Text(
+            "${leg.durationMins} min",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

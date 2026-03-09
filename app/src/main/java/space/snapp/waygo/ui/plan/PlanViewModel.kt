@@ -8,13 +8,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import space.snapp.waygo.data.api.NominatimService
+import space.snapp.waygo.data.api.TransitApiService
 import space.snapp.waygo.data.api.models.AddressResult
+import space.snapp.waygo.data.api.models.Itinerary
 
 class PlanViewModel : ViewModel() {
 
     enum class ActiveField { FROM, TO, NONE }
 
     private val nominatim = NominatimService.instance
+    private val api = TransitApiService.instance
 
     val fromQuery = MutableStateFlow("")
     val toQuery = MutableStateFlow("")
@@ -34,10 +37,20 @@ class PlanViewModel : ViewModel() {
     private val _isSearching = MutableStateFlow(false)
     val isSearching = _isSearching.asStateFlow()
 
+    private val _itineraries = MutableStateFlow<List<Itinerary>>(emptyList())
+    val itineraries = _itineraries.asStateFlow()
+
+    private val _isPlanning = MutableStateFlow(false)
+    val isPlanning = _isPlanning.asStateFlow()
+
+    private val _planError = MutableStateFlow<String?>(null)
+    val planError = _planError.asStateFlow()
+
     var userLat: Double? = null
     var userLon: Double? = null
 
     private var searchJob: Job? = null
+    private var planJob: Job? = null
 
     fun activateField(field: ActiveField) {
         _activeField.value = field
@@ -75,6 +88,23 @@ class PlanViewModel : ViewModel() {
             ActiveField.NONE -> {}
         }
         _suggestions.value = emptyList()
+        // Auto-search when both endpoints are now set
+        val from = _fromSelected.value
+        val to = _toSelected.value ?: if (_activeField.value == ActiveField.NONE) result else null
+        if (from != null && to != null) fetchPlan(from, to)
+    }
+
+    private fun fetchPlan(from: AddressResult, to: AddressResult) {
+        planJob?.cancel()
+        _itineraries.value = emptyList()
+        _planError.value = null
+        planJob = viewModelScope.launch {
+            _isPlanning.value = true
+            runCatching { api.plan(from.lat, from.lon, to.lat, to.lon) }
+                .onSuccess { _itineraries.value = it.itineraries }
+                .onFailure { _planError.value = "Could not load journey options" }
+            _isPlanning.value = false
+        }
     }
 
     fun useMyLocationAsFrom() {
@@ -99,6 +129,7 @@ class PlanViewModel : ViewModel() {
     fun clearFrom() {
         fromQuery.value = ""
         _fromSelected.value = null
+        _itineraries.value = emptyList()
         _activeField.value = ActiveField.FROM
         _suggestions.value = emptyList()
     }
@@ -106,6 +137,7 @@ class PlanViewModel : ViewModel() {
     fun clearTo() {
         toQuery.value = ""
         _toSelected.value = null
+        _itineraries.value = emptyList()
         _activeField.value = ActiveField.TO
         _suggestions.value = emptyList()
     }
@@ -116,6 +148,7 @@ class PlanViewModel : ViewModel() {
         _fromSelected.value = null
         _toSelected.value = null
         _suggestions.value = emptyList()
+        _itineraries.value = emptyList()
         _activeField.value = ActiveField.FROM
     }
 
