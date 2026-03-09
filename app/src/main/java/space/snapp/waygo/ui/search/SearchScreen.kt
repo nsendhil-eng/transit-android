@@ -15,7 +15,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import space.snapp.waygo.data.api.models.Departure
+import space.snapp.waygo.data.api.models.Itinerary
 import space.snapp.waygo.data.api.models.Stop
 import space.snapp.waygo.data.models.FavoriteStop
 import space.snapp.waygo.ui.components.StopRow
@@ -25,6 +31,7 @@ import space.snapp.waygo.ui.departures.DeparturesViewModel
 import space.snapp.waygo.ui.favorites.AddFavouriteSheet
 import space.snapp.waygo.ui.favorites.FavoritesViewModel
 import space.snapp.waygo.ui.map.NearbyStopsMapView
+import space.snapp.waygo.ui.plan.ItineraryDetailScreen
 import space.snapp.waygo.ui.plan.PlanCard
 import space.snapp.waygo.ui.plan.PlanViewModel
 import space.snapp.waygo.ui.tripdetail.TripDetailArgs
@@ -47,9 +54,13 @@ fun SearchScreen(
     val isSearching by viewModel.isSearching.collectAsState()
     val hasSearched by viewModel.hasSearched.collectAsState()
 
+    val fromSelected by planViewModel.fromSelected.collectAsState()
+    val toSelected by planViewModel.toSelected.collectAsState()
+
     var showSaveSheet by remember { mutableStateOf(false) }
     var stopsForSaving by remember { mutableStateOf<List<Stop>>(emptyList()) }
     var inPlanMode by remember { mutableStateOf(false) }
+    var selectedItinerary by remember { mutableStateOf<Itinerary?>(null) }
 
     // White — high contrast against dark map
     val searchBarBg = Color.White
@@ -90,7 +101,8 @@ fun SearchScreen(
                     viewModel = planViewModel,
                     userLat = userLat,
                     userLon = userLon,
-                    onClose = { inPlanMode = false; planViewModel.reset() }
+                    onClose = { inPlanMode = false; planViewModel.reset() },
+                    onItinerarySelect = { selectedItinerary = it }
                 )
             } else {
                 Surface(
@@ -341,6 +353,23 @@ fun SearchScreen(
                 }
 
                 else -> { /* map is the content — nothing needed */ }
+            }
+        }
+
+        // Itinerary detail — full-screen overlay inside the same Box so it covers the map
+        AnimatedVisibility(
+            visible = selectedItinerary != null,
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            selectedItinerary?.let { itinerary ->
+                ItineraryDetailScreen(
+                    itinerary = itinerary,
+                    fromName = fromSelected?.shortName ?: "",
+                    toName = toSelected?.shortName ?: "",
+                    onBack = { selectedItinerary = null }
+                )
             }
         }
     }

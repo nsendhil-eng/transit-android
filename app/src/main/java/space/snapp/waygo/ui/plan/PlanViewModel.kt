@@ -100,7 +100,18 @@ class PlanViewModel : ViewModel() {
         _planError.value = null
         planJob = viewModelScope.launch {
             _isPlanning.value = true
-            runCatching { api.plan(from.lat, from.lon, to.lat, to.lon) }
+            val now = java.util.Calendar.getInstance()
+            val date = "%04d-%02d-%02d".format(
+                now.get(java.util.Calendar.YEAR),
+                now.get(java.util.Calendar.MONTH) + 1,
+                now.get(java.util.Calendar.DAY_OF_MONTH)
+            )
+            val h = now.get(java.util.Calendar.HOUR_OF_DAY)
+            val m = now.get(java.util.Calendar.MINUTE)
+            val ampm = if (now.get(java.util.Calendar.AM_PM) == java.util.Calendar.AM) "am" else "pm"
+            val h12 = now.get(java.util.Calendar.HOUR).let { if (it == 0) 12 else it }
+            val time = "%d:%02d%s".format(h12, m, ampm)
+            runCatching { api.plan(from.lat, from.lon, to.lat, to.lon, date = date, time = time) }
                 .onSuccess { _itineraries.value = it.itineraries }
                 .onFailure { _planError.value = "Could not load journey options" }
             _isPlanning.value = false

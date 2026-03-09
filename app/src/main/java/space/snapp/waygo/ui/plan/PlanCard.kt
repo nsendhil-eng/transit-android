@@ -37,7 +37,8 @@ fun PlanCard(
     viewModel: PlanViewModel,
     userLat: Double?,
     userLon: Double?,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    onItinerarySelect: (Itinerary) -> Unit = {}
 ) {
     val fromQuery by viewModel.fromQuery.collectAsState()
     val toQuery by viewModel.toQuery.collectAsState()
@@ -297,13 +298,36 @@ fun PlanCard(
                 }
 
                 itineraries.isNotEmpty() -> {
-                    var expandedIndex by remember { mutableStateOf<Int?>(0) }
+                    var sortFastest by remember { mutableStateOf(true) }
+                    val sorted = if (sortFastest)
+                        itineraries.sortedBy { it.duration }
+                    else
+                        itineraries.sortedBy { it.walkDistance }
+
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        itineraries.forEachIndexed { index, itinerary ->
+                        // Sort chips
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(
+                                selected = sortFastest,
+                                onClick = { sortFastest = true },
+                                label = { Text("Fastest") },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
+                                }
+                            )
+                            FilterChip(
+                                selected = !sortFastest,
+                                onClick = { sortFastest = false },
+                                label = { Text("Least walking") },
+                                leadingIcon = {
+                                    Icon(Icons.Default.DirectionsWalk, contentDescription = null, modifier = Modifier.size(16.dp))
+                                }
+                            )
+                        }
+                        sorted.forEach { itinerary ->
                             ItineraryCard(
                                 itinerary = itinerary,
-                                isExpanded = expandedIndex == index,
-                                onTap = { expandedIndex = if (expandedIndex == index) null else index }
+                                onTap = { onItinerarySelect(itinerary) }
                             )
                         }
                     }
@@ -314,22 +338,27 @@ fun PlanCard(
 }
 
 @Composable
-private fun ItineraryCard(itinerary: Itinerary, isExpanded: Boolean, onTap: () -> Unit) {
+private fun ItineraryCard(itinerary: Itinerary, onTap: () -> Unit) {
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surface,
         shadowElevation = 6.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.clickable(onClick = onTap).padding(16.dp)) {
-            // Summary row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+        Row(
+            modifier = Modifier.clickable(onClick = onTap).padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                // Departure window
+                Text(
+                    "${planFormatTime(itinerary.startTime)} → ${planFormatTime(itinerary.endTime)}",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(6.dp))
                 // Mode chips
                 Row(
-                    modifier = Modifier.weight(1f),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -343,6 +372,7 @@ private fun ItineraryCard(itinerary: Itinerary, isExpanded: Boolean, onTap: () -
                                     leg.routeShortName ?: leg.mode,
                                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                     color = Color.White,
+                                    maxLines = 1,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                 )
                             }
@@ -358,38 +388,44 @@ private fun ItineraryCard(itinerary: Itinerary, isExpanded: Boolean, onTap: () -
                         }
                     }
                 }
-                // Total time
+                Spacer(Modifier.height(4.dp))
+                // Subtitle: walk distance + transfers
+                val walkKm = itinerary.walkDistance / 1000f
+                val walkText = if (walkKm < 1f) "${itinerary.walkDistance}m walk" else "${"%.1f".format(walkKm)}km walk"
+                val transferText = when (itinerary.transfers) {
+                    0 -> "No transfers"
+                    1 -> "1 transfer"
+                    else -> "${itinerary.transfers} transfers"
+                }
+                Text(
+                    "$walkText · $transferText",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(Modifier.width(12.dp))
+            Column(horizontalAlignment = Alignment.End) {
                 Text(
                     "${itinerary.durationMins} min",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurface
                 )
-            }
-
-            // Subtitle: walk distance + transfers
-            val walkKm = itinerary.walkDistance / 1000f
-            val walkText = if (walkKm < 1f) "${itinerary.walkDistance}m walk" else "${"%.1f".format(walkKm)}km walk"
-            val transferText = when (itinerary.transfers) {
-                0 -> "No transfers"
-                1 -> "1 transfer"
-                else -> "${itinerary.transfers} transfers"
-            }
-            Text(
-                "$walkText · $transferText",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-
-            // Expanded leg details
-            if (isExpanded) {
-                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    itinerary.legs.forEach { leg -> LegRow(leg) }
-                }
+                Icon(Icons.Default.ChevronRight, contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp))
             }
         }
     }
+}
+
+private fun planFormatTime(epochMs: Long): String {
+    val cal = java.util.Calendar.getInstance()
+    cal.timeInMillis = epochMs
+    val h = cal.get(java.util.Calendar.HOUR)
+    val m = cal.get(java.util.Calendar.MINUTE)
+    val ampm = if (cal.get(java.util.Calendar.AM_PM) == java.util.Calendar.AM) "AM" else "PM"
+    return "%d:%02d %s".format(if (h == 0) 12 else h, m, ampm)
 }
 
 @Composable
