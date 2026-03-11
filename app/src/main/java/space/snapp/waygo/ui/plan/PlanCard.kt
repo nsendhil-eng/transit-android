@@ -6,12 +6,16 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,6 +36,7 @@ import space.snapp.waygo.data.api.models.Itinerary
 import space.snapp.waygo.data.api.models.ItineraryLeg
 import space.snapp.waygo.ui.plan.PlanViewModel.ActiveField
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlanCard(
     viewModel: PlanViewModel,
@@ -304,31 +309,60 @@ fun PlanCard(
                     else
                         itineraries.sortedBy { it.walkDistance }
 
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        // Sort chips
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(
-                                selected = sortFastest,
-                                onClick = { sortFastest = true },
-                                label = { Text("Fastest") },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
+                    val pullState = rememberPullToRefreshState()
+
+                    PullToRefreshBox(
+                        isRefreshing = isPlanning,
+                        onRefresh = { viewModel.refresh() },
+                        state = pullState,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .verticalScroll(rememberScrollState())
+                                .fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Sort chips + refresh button
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                FilterChip(
+                                    selected = sortFastest,
+                                    onClick = { sortFastest = true },
+                                    label = { Text("Fastest") },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    }
+                                )
+                                FilterChip(
+                                    selected = !sortFastest,
+                                    onClick = { sortFastest = false },
+                                    label = { Text("Least walking") },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.DirectionsWalk, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    }
+                                )
+                                Spacer(Modifier.weight(1f))
+                                IconButton(
+                                    onClick = { viewModel.refresh() },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Refresh,
+                                        contentDescription = "Refresh results",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(20.dp)
+                                    )
                                 }
-                            )
-                            FilterChip(
-                                selected = !sortFastest,
-                                onClick = { sortFastest = false },
-                                label = { Text("Least walking") },
-                                leadingIcon = {
-                                    Icon(Icons.Default.DirectionsWalk, contentDescription = null, modifier = Modifier.size(16.dp))
-                                }
-                            )
-                        }
-                        sorted.forEach { itinerary ->
-                            ItineraryCard(
-                                itinerary = itinerary,
-                                onTap = { onItinerarySelect(itinerary) }
-                            )
+                            }
+                            sorted.forEach { itinerary ->
+                                ItineraryCard(
+                                    itinerary = itinerary,
+                                    onTap = { onItinerarySelect(itinerary) }
+                                )
+                            }
                         }
                     }
                 }

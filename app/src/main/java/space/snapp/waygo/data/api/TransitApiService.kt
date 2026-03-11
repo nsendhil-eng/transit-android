@@ -8,6 +8,7 @@ import retrofit2.http.GET
 import retrofit2.http.Query
 import space.snapp.waygo.data.api.models.Departure
 import space.snapp.waygo.data.api.models.NextTripsResponse
+import space.snapp.waygo.data.api.models.PlanDelayResponse
 import space.snapp.waygo.data.api.models.PlanResponse
 import space.snapp.waygo.data.api.models.RouteShape
 import space.snapp.waygo.data.api.models.SearchResponse
@@ -72,6 +73,11 @@ interface TransitApiService {
         @Query("direction_id") directionId: Int,
         @Query("stop_id") stopId: String
     ): NextTripsResponse
+
+    @GET("/api/plan-delays")
+    suspend fun planDelays(
+        @Query("trip_ids") tripIds: String
+    ): PlanDelayResponse
 
     @GET("/api/plan")
     suspend fun plan(

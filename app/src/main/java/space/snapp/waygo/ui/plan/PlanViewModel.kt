@@ -118,6 +118,12 @@ class PlanViewModel : ViewModel() {
         }
     }
 
+    fun refresh() {
+        val from = _fromSelected.value ?: return
+        val to = _toSelected.value ?: return
+        fetchPlan(from, to)
+    }
+
     fun useMyLocationAsFrom() {
         val lat = userLat ?: return
         val lon = userLon ?: return

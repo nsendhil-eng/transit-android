@@ -33,6 +33,7 @@ import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
+import space.snapp.waygo.data.api.TransitApiService
 import space.snapp.waygo.data.api.models.Itinerary
 import space.snapp.waygo.data.api.models.ItineraryLeg
 
@@ -60,6 +61,20 @@ fun ItineraryDetailScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val mapRef = remember { mutableStateOf<MapView?>(null) }
     val dp = context.resources.displayMetrics.density
+
+    // Delay check — only runs once when screen opens, only for bus/tram legs
+    var hasTrafficDelay by remember { mutableStateOf(false) }
+    LaunchedEffect(itinerary) {
+        val tripIds = itinerary.legs
+            .filter { it.mode == "BUS" || it.mode == "TRAM" }
+            .mapNotNull { it.tripId }
+        if (tripIds.isEmpty()) return@LaunchedEffect
+        runCatching {
+            TransitApiService.instance.planDelays(tripIds.joinToString(","))
+        }.onSuccess { response ->
+            hasTrafficDelay = response.delays.values.any { it > 60 }
+        }
+    }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -153,6 +168,29 @@ fun ItineraryDetailScreen(
                         }
                     }
                     HorizontalDivider()
+                    // Traffic delay banner — only shown when bus/tram delay > 1 min detected
+                    if (hasTrafficDelay) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.85f))
+                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                "Delays reported on this route",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
                 }
             }
         }
