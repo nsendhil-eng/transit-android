@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import space.snapp.waygo.data.api.models.Departure
+import space.snapp.waygo.data.models.FavoritePlace
 import space.snapp.waygo.data.models.FavoriteStop
 import space.snapp.waygo.ui.departures.DeparturesScreen
 import space.snapp.waygo.ui.departures.DeparturesViewModel
@@ -28,45 +29,90 @@ fun FavoritesScreen(
     onDepartureClick: ((Departure) -> Unit)? = null
 ) {
     val favorites by viewModel.favorites.collectAsState()
+    val favoritePlaces by viewModel.favoritePlaces.collectAsState()
     val favDepartures by viewModel.favDepartures.collectAsState()
     var selectedFavorite by remember { mutableStateOf<FavoriteStop?>(null) }
     var editingFavorite by remember { mutableStateOf<FavoriteStop?>(null) }
+    var showAddPlaceSheet by remember { mutableStateOf(false) }
     val departuresVM = remember { DeparturesViewModel() }
 
-    // Start/stop polling departures for all favourites while this screen is visible
     LaunchedEffect(Unit) { viewModel.startDeparturePolling() }
     DisposableEffect(Unit) { onDispose { viewModel.stopDeparturePolling() } }
 
-    if (favorites.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.FavoriteBorder, contentDescription = null,
-                    modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(16.dp))
-                Text("No saved favourites", style = MaterialTheme.typography.titleMedium)
-                Text("Search for stops and tap Save to add them here.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Add Favourite Place button — always shown at top
+        OutlinedButton(
+            onClick = { showAddPlaceSheet = true },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Add Favourite Place")
+        }
+
+        if (favoritePlaces.isEmpty() && favorites.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Default.FavoriteBorder,
+                        contentDescription = null,
+                        modifier = Modifier.size(64.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Text("No saved favourites", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Search for stops and tap Save to add them here.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        } else {
+            LazyColumn(modifier = Modifier.weight(1f)) {
+                items(favoritePlaces, key = { "place_${it.id}" }) { place ->
+                    FavoritePlaceCard(
+                        place = place,
+                        onDelete = { viewModel.deleteFavoritePlace(place) }
+                    )
+                    HorizontalDivider()
+                }
+                items(favorites, key = { "stop_${it.id}" }) { fav ->
+                    val preview = favDepartures
+                        .filter { (stopId, _) -> fav.stops.any { it.id == stopId } }
+                        .values.flatten()
+                        .sortedBy { it.liveSeconds }
+                        .take(2)
+                    FavoriteCard(
+                        favorite = fav,
+                        previewDepartures = preview,
+                        onTap = { selectedFavorite = fav },
+                        onEdit = { editingFavorite = fav },
+                        onDelete = { viewModel.deleteFavorite(fav) }
+                    )
+                    HorizontalDivider()
+                }
             }
         }
-    } else {
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
-            items(favorites, key = { it.id }) { fav ->
-                val preview = favDepartures
-                    .filter { (stopId, _) -> fav.stops.any { it.id == stopId } }
-                    .values.flatten()
-                    .sortedBy { it.liveSeconds }
-                    .take(2)
-                FavoriteCard(
-                    favorite = fav,
-                    previewDepartures = preview,
-                    onTap = { selectedFavorite = fav },
-                    onEdit = { editingFavorite = fav },
-                    onDelete = { viewModel.deleteFavorite(fav) }
-                )
-                HorizontalDivider()
+    }
+
+    // Add place sheet
+    if (showAddPlaceSheet) {
+        AddFavouritePlaceSheet(
+            favoritesVM = viewModel,
+            onDismiss = { showAddPlaceSheet = false },
+            onSave = { place ->
+                viewModel.saveFavoritePlace(place)
+                showAddPlaceSheet = false
             }
-        }
+        )
     }
 
     // Departures bottom sheet
@@ -110,6 +156,70 @@ fun FavoritesScreen(
             onSave = { updated ->
                 viewModel.updateFavorite(updated)
                 editingFavorite = null
+            }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun FavoritePlaceCard(
+    place: FavoritePlace,
+    onDelete: () -> Unit
+) {
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = {
+            if (it == SwipeToDismissBoxValue.EndToStart) { onDelete(); true } else false
+        }
+    )
+    SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = false,
+        backgroundContent = {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Delete",
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    ) {
+        ListItem(
+            headlineContent = {
+                Text(
+                    place.name,
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
+                )
+            },
+            supportingContent = {
+                Text(
+                    place.displayName.split(",").take(3).joinToString(",").trim(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2
+                )
+            },
+            leadingContent = {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(44.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Default.Place,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
             }
         )
     }
@@ -201,7 +311,6 @@ fun FavoriteCard(
                 }
             },
             leadingContent = {
-                // Rounded-rect badge with red heart, matching iOS heart.fill
                 Surface(
                     shape = RoundedCornerShape(10.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant,

@@ -9,17 +9,24 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import space.snapp.waygo.data.api.NominatimService
 import space.snapp.waygo.data.api.TransitApiService
+import space.snapp.waygo.data.api.models.AddressResult
 import space.snapp.waygo.data.api.models.Departure
 import space.snapp.waygo.data.api.models.Stop
 import space.snapp.waygo.data.local.FavoritesRepository
+import space.snapp.waygo.data.models.FavoritePlace
 import space.snapp.waygo.data.models.FavoriteStop
 
 class FavoritesViewModel(private val repo: FavoritesRepository) : ViewModel() {
     private val api = TransitApiService.instance
+    private val nominatim = NominatimService.instance
 
     private val _favorites = MutableStateFlow<List<FavoriteStop>>(emptyList())
     val favorites = _favorites.asStateFlow()
+
+    private val _favoritePlaces = MutableStateFlow<List<FavoritePlace>>(emptyList())
+    val favoritePlaces = _favoritePlaces.asStateFlow()
 
     // Departures for all favourites, keyed by stop_id — refreshed every 10 s
     private val _favDepartures = MutableStateFlow<Map<String, List<Departure>>>(emptyMap())
@@ -30,6 +37,9 @@ class FavoritesViewModel(private val repo: FavoritesRepository) : ViewModel() {
     init {
         viewModelScope.launch {
             repo.favoriteStops.collect { _favorites.value = it }
+        }
+        viewModelScope.launch {
+            repo.favoritePlaces.collect { _favoritePlaces.value = it }
         }
     }
 
@@ -78,9 +88,30 @@ class FavoritesViewModel(private val repo: FavoritesRepository) : ViewModel() {
         }
     }
 
+    fun saveFavoritePlace(place: FavoritePlace) {
+        viewModelScope.launch { repo.savePlaces(_favoritePlaces.value + place) }
+    }
+
+    fun deleteFavoritePlace(place: FavoritePlace) {
+        viewModelScope.launch { repo.savePlaces(_favoritePlaces.value.filter { it.id != place.id }) }
+    }
+
     // Add-stop search helper used by AddFavouriteSheet
     suspend fun searchStops(query: String, lat: Double?, lon: Double?): List<Stop> =
         runCatching { api.search(query, lat, lon).stops }.getOrDefault(emptyList())
+
+    // Address search helper used by AddFavouritePlaceSheet
+    suspend fun searchAddresses(query: String): List<AddressResult> =
+        runCatching {
+            nominatim.search(query.trim()).map {
+                AddressResult(
+                    placeId = it.placeId,
+                    displayName = it.displayName,
+                    lat = it.lat.toDoubleOrNull() ?: 0.0,
+                    lon = it.lon.toDoubleOrNull() ?: 0.0
+                )
+            }
+        }.getOrDefault(emptyList())
 
     class Factory(private val context: Context) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
