@@ -10,9 +10,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import space.snapp.waygo.data.api.models.Stop
+import space.snapp.waygo.data.models.FavoriteDestination
+import space.snapp.waygo.data.models.FavoritePlace
 import space.snapp.waygo.data.models.FavoriteStop
 import space.snapp.waygo.ui.components.icon
 
@@ -22,6 +25,7 @@ fun AddFavouriteSheet(
     stops: List<Stop>,
     existing: FavoriteStop? = null,
     favoritesVM: FavoritesViewModel? = null,
+    savedPlaces: List<FavoritePlace> = emptyList(),
     userLat: Double? = null,
     userLon: Double? = null,
     onDismiss: () -> Unit,
@@ -33,41 +37,69 @@ fun AddFavouriteSheet(
     var editableStops by remember { mutableStateOf(stops.toMutableList() as List<Stop>) }
     var addStopQuery by remember { mutableStateOf("") }
     var addStopResults by remember { mutableStateOf<List<Stop>>(emptyList()) }
-    var getOffStopId by remember { mutableStateOf(existing?.getOffStopId) }
-    var getOffStopName by remember { mutableStateOf(existing?.getOffStopName) }
-    var getOffQuery by remember { mutableStateOf("") }
-    var getOffResults by remember { mutableStateOf<List<Stop>>(emptyList()) }
+
+    // Destinations — migrate legacy single getOff to new list format on first open
+    var destinations by remember {
+        val initial: List<FavoriteDestination> = when {
+            existing?.destinations?.isNotEmpty() == true -> existing.destinations
+            existing?.getOffStopId != null -> listOf(
+                FavoriteDestination(
+                    stopIds = existing.getOffStopId.split(",").map { it.trim() }.filter { it.isNotEmpty() },
+                    displayName = existing.getOffStopName ?: "Destination"
+                )
+            )
+            else -> emptyList()
+        }
+        mutableStateOf(initial)
+    }
+    var destQuery by remember { mutableStateOf("") }
+    var destResults by remember { mutableStateOf<List<Stop>>(emptyList()) }
+    var showPlacePicker by remember { mutableStateOf(false) }
+    var isResolvingPlace by remember { mutableStateOf(false) }
 
     fun searchStops(query: String, onResult: (List<Stop>) -> Unit) {
         if (favoritesVM == null || query.length < 2) { onResult(emptyList()); return }
-        scope.launch {
-            onResult(favoritesVM.searchStops(query, userLat, userLon))
-        }
+        scope.launch { onResult(favoritesVM.searchStops(query, userLat, userLon)) }
     }
 
-    fun addStop(stop: Stop) {
+    fun addOriginStop(stop: Stop) {
         val parent = stop.parentStation?.takeIf { it.isNotEmpty() }
         val toAdd = if (parent != null) {
             val siblings = addStopResults.filter { it.parentStation == parent }
             if (siblings.size > 1) siblings else listOf(stop)
         } else listOf(stop)
-        editableStops = (editableStops + toAdd.filter { s -> editableStops.none { it.id == s.id } })
+        editableStops = editableStops + toAdd.filter { s -> editableStops.none { it.id == s.id } }
         addStopQuery = ""
         addStopResults = emptyList()
     }
 
-    fun selectGetOff(stop: Stop) {
+    fun addDestinationStop(stop: Stop) {
         val parent = stop.parentStation?.takeIf { it.isNotEmpty() }
-        if (parent != null) {
-            val siblings = getOffResults.filter { it.parentStation == parent }
-            if (siblings.size > 1) {
-                getOffStopId = siblings.joinToString(",") { it.id }
-                getOffStopName = stop.parentStationName ?: stop.name
-                getOffQuery = ""; getOffResults = emptyList(); return
+        val toAdd = if (parent != null) {
+            val siblings = destResults.filter { it.parentStation == parent }
+            if (siblings.size > 1) siblings else listOf(stop)
+        } else listOf(stop)
+        val stopIds = toAdd.map { it.id }
+        val displayName = if (parent != null) stop.parentStationName ?: stop.name else stop.name
+        destinations = destinations + FavoriteDestination(stopIds = stopIds, displayName = displayName)
+        destQuery = ""
+        destResults = emptyList()
+    }
+
+    fun resolveAndAddPlace(place: FavoritePlace) {
+        showPlacePicker = false
+        isResolvingPlace = true
+        scope.launch {
+            val nearbyStops = favoritesVM?.fetchNearbyStops(place.lat, place.lon, 200) ?: emptyList()
+            isResolvingPlace = false
+            if (nearbyStops.isNotEmpty()) {
+                destinations = destinations + FavoriteDestination(
+                    stopIds = nearbyStops.map { it.id },
+                    displayName = "near ${place.name}",
+                    fromPlaceName = place.name
+                )
             }
         }
-        getOffStopId = stop.id; getOffStopName = stop.name
-        getOffQuery = ""; getOffResults = emptyList()
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -96,18 +128,25 @@ fun AddFavouriteSheet(
 
             Spacer(Modifier.height(16.dp))
 
-            // Get On At
-            Text("Get On At", style = MaterialTheme.typography.labelLarge,
+            // --- Origin stops ---
+            Text(
+                "Get On At",
+                style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 8.dp))
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
 
             editableStops.forEach { stop ->
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(stop.primaryVehicleType.icon(), contentDescription = null,
-                        modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                    Icon(
+                        stop.primaryVehicleType.icon(),
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
                     Spacer(Modifier.width(8.dp))
                     Text(stop.name, modifier = Modifier.weight(1f))
                     IconButton(onClick = { editableStops = editableStops.filter { it.id != stop.id } }) {
@@ -116,7 +155,6 @@ fun AddFavouriteSheet(
                 }
             }
 
-            // Add stop search
             OutlinedTextField(
                 value = addStopQuery,
                 onValueChange = { q -> addStopQuery = q; searchStops(q) { addStopResults = it } },
@@ -134,7 +172,7 @@ fun AddFavouriteSheet(
                 ListItem(
                     headlineContent = { Text(stop.name) },
                     leadingContent = { Icon(stop.primaryVehicleType.icon(), contentDescription = null) },
-                    modifier = Modifier.clickable { addStop(stop) }
+                    modifier = Modifier.clickable { addOriginStop(stop) }
                 )
             }
 
@@ -142,61 +180,111 @@ fun AddFavouriteSheet(
             HorizontalDivider()
             Spacer(Modifier.height(16.dp))
 
-            // Get Off At
-            Text("Get Off At (optional)", style = MaterialTheme.typography.labelLarge,
+            // --- Destinations ---
+            Text(
+                "Destinations (optional)",
+                style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 8.dp))
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+            Text(
+                "Only services calling at any destination will be shown.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
 
-            if (getOffStopName != null) {
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Place, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(8.dp))
-                    Text(getOffStopName!!, modifier = Modifier.weight(1f))
-                    IconButton(onClick = { getOffStopId = null; getOffStopName = null }) {
-                        Icon(Icons.Default.Close, contentDescription = "Clear")
-                    }
-                }
-            } else {
-                OutlinedTextField(
-                    value = getOffQuery,
-                    onValueChange = { q -> getOffQuery = q; searchStops(q) { getOffResults = it } },
-                    placeholder = { Text("Destination stop...") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    trailingIcon = if (getOffQuery.isNotEmpty()) ({
-                        IconButton(onClick = { getOffQuery = ""; getOffResults = emptyList() }) {
-                            Icon(Icons.Default.Close, contentDescription = null)
-                        }
-                    }) else null,
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                getOffResults.take(5).forEach { stop ->
-                    ListItem(
-                        headlineContent = { Text(stop.name) },
-                        leadingContent = { Icon(stop.primaryVehicleType.icon(), contentDescription = null) },
-                        modifier = Modifier.clickable { selectGetOff(stop) }
+            // Added destinations list
+            destinations.forEach { dest ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Place,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.primary
                     )
+                    Spacer(Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(dest.displayName, style = MaterialTheme.typography.bodyMedium)
+                        dest.fromPlaceName?.let {
+                            Text(
+                                "Stops near $it",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                    IconButton(onClick = { destinations = destinations.filter { it !== dest } }) {
+                        Icon(Icons.Default.RemoveCircle, contentDescription = "Remove", tint = MaterialTheme.colorScheme.error)
+                    }
                 }
             }
 
-            Text(
-                "Only services that call at this stop will be shown",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
-            )
+            // Place resolution loading indicator
+            if (isResolvingPlace) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Finding nearby stops...", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
 
-            // Save button
+            // Add destination stop search
+            OutlinedTextField(
+                value = destQuery,
+                onValueChange = { q -> destQuery = q; searchStops(q) { destResults = it } },
+                placeholder = { Text("Add destination stop...") },
+                leadingIcon = { Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                trailingIcon = if (destQuery.isNotEmpty()) ({
+                    IconButton(onClick = { destQuery = ""; destResults = emptyList() }) {
+                        Icon(Icons.Default.Close, contentDescription = null)
+                    }
+                }) else null,
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            )
+            destResults.take(5).forEach { stop ->
+                ListItem(
+                    headlineContent = { Text(stop.name) },
+                    leadingContent = { Icon(stop.primaryVehicleType.icon(), contentDescription = null) },
+                    modifier = Modifier.clickable { addDestinationStop(stop) }
+                )
+            }
+
+            // Add from saved places button
+            if (savedPlaces.isNotEmpty()) {
+                TextButton(
+                    onClick = { showPlacePicker = true },
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                ) {
+                    Icon(Icons.Default.Place, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Add from saved places")
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // Save / Cancel
             Button(
                 onClick = {
-                    val fav = FavoriteStop(
-                        id = existing?.id ?: java.util.UUID.randomUUID().toString(),
-                        name = name.trim(),
-                        stops = editableStops,
-                        getOffStopId = getOffStopId,
-                        getOffStopName = getOffStopName
+                    onSave(
+                        FavoriteStop(
+                            id = existing?.id ?: java.util.UUID.randomUUID().toString(),
+                            name = name.trim(),
+                            stops = editableStops,
+                            destinations = destinations
+                        )
                     )
-                    onSave(fav)
                 },
                 enabled = name.isNotBlank() && editableStops.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth()
@@ -209,5 +297,35 @@ fun AddFavouriteSheet(
             }
             Spacer(Modifier.height(16.dp))
         }
+    }
+
+    // Place picker dialog
+    if (showPlacePicker) {
+        AlertDialog(
+            onDismissRequest = { showPlacePicker = false },
+            title = { Text("Add from saved places") },
+            text = {
+                Column {
+                    savedPlaces.forEach { place ->
+                        ListItem(
+                            headlineContent = { Text(place.name) },
+                            supportingContent = {
+                                Text(
+                                    place.displayName.split(",").take(2).joinToString(",").trim(),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            leadingContent = { Icon(Icons.Default.Place, contentDescription = null) },
+                            modifier = Modifier.clickable { resolveAndAddPlace(place) }
+                        )
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showPlacePicker = false }) { Text("Cancel") }
+            }
+        )
     }
 }

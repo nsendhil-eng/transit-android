@@ -34,29 +34,42 @@ fun FavoritesScreen(
     var selectedFavorite by remember { mutableStateOf<FavoriteStop?>(null) }
     var editingFavorite by remember { mutableStateOf<FavoriteStop?>(null) }
     var showAddPlaceSheet by remember { mutableStateOf(false) }
+    var editingPlace by remember { mutableStateOf<FavoritePlace?>(null) }
+    var showAddFavoriteSheet by remember { mutableStateOf(false) }
     val departuresVM = remember { DeparturesViewModel() }
 
     LaunchedEffect(Unit) { viewModel.startDeparturePolling() }
     DisposableEffect(Unit) { onDispose { viewModel.stopDeparturePolling() } }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Add Favourite Place button — always shown at top
-        OutlinedButton(
-            onClick = { showAddPlaceSheet = true },
+        // Action buttons row at top
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
-            Text("Add Favourite Place")
+            OutlinedButton(
+                onClick = { showAddPlaceSheet = true },
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.Place, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Add Place")
+            }
+            Button(
+                onClick = { showAddFavoriteSheet = true },
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Add Favourite")
+            }
         }
 
         if (favoritePlaces.isEmpty() && favorites.isEmpty()) {
             Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -69,7 +82,7 @@ fun FavoritesScreen(
                     Spacer(Modifier.height(16.dp))
                     Text("No saved favourites", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "Search for stops and tap Save to add them here.",
+                        "Add places or favourite routes above.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -80,6 +93,7 @@ fun FavoritesScreen(
                 items(favoritePlaces, key = { "place_${it.id}" }) { place ->
                     FavoritePlaceCard(
                         place = place,
+                        onEdit = { editingPlace = place },
                         onDelete = { viewModel.deleteFavoritePlace(place) }
                     )
                     HorizontalDivider()
@@ -115,6 +129,52 @@ fun FavoritesScreen(
         )
     }
 
+    // Edit place sheet
+    editingPlace?.let { place ->
+        AddFavouritePlaceSheet(
+            favoritesVM = viewModel,
+            existing = place,
+            onDismiss = { editingPlace = null },
+            onSave = { updated ->
+                viewModel.updateFavoritePlace(updated)
+                editingPlace = null
+            }
+        )
+    }
+
+    // Add new favourite sheet
+    if (showAddFavoriteSheet) {
+        AddFavouriteSheet(
+            stops = emptyList(),
+            favoritesVM = viewModel,
+            savedPlaces = favoritePlaces,
+            userLat = userLat,
+            userLon = userLon,
+            onDismiss = { showAddFavoriteSheet = false },
+            onSave = { fav ->
+                viewModel.saveFavorite(fav)
+                showAddFavoriteSheet = false
+            }
+        )
+    }
+
+    // Edit favourite sheet
+    editingFavorite?.let { fav ->
+        AddFavouriteSheet(
+            stops = fav.stops,
+            existing = fav,
+            favoritesVM = viewModel,
+            savedPlaces = favoritePlaces,
+            userLat = userLat,
+            userLon = userLon,
+            onDismiss = { editingFavorite = null },
+            onSave = { updated ->
+                viewModel.updateFavorite(updated)
+                editingFavorite = null
+            }
+        )
+    }
+
     // Departures bottom sheet
     selectedFavorite?.let { fav ->
         ModalBottomSheet(onDismissRequest = { selectedFavorite = null }) {
@@ -133,7 +193,7 @@ fun FavoritesScreen(
                     DeparturesScreen(
                         viewModel = departuresVM,
                         stops = fav.stops,
-                        getOffStopId = fav.getOffStopId,
+                        getOffStopId = fav.effectiveGetOffStopId,
                         onDepartureClick = { dep ->
                             selectedFavorite = null
                             onDepartureClick?.invoke(dep)
@@ -143,28 +203,13 @@ fun FavoritesScreen(
             }
         }
     }
-
-    // Edit bottom sheet
-    editingFavorite?.let { fav ->
-        AddFavouriteSheet(
-            stops = fav.stops,
-            existing = fav,
-            favoritesVM = viewModel,
-            userLat = userLat,
-            userLon = userLon,
-            onDismiss = { editingFavorite = null },
-            onSave = { updated ->
-                viewModel.updateFavorite(updated)
-                editingFavorite = null
-            }
-        )
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FavoritePlaceCard(
     place: FavoritePlace,
+    onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
     val dismissState = rememberSwipeToDismissBoxState(
@@ -177,16 +222,10 @@ fun FavoritePlaceCard(
         enableDismissFromStartToEnd = false,
         backgroundContent = {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp),
+                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
                 contentAlignment = Alignment.CenterEnd
             ) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Delete",
-                    tint = MaterialTheme.colorScheme.error
-                )
+                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
             }
         }
     ) {
@@ -220,6 +259,11 @@ fun FavoritePlaceCard(
                         )
                     }
                 }
+            },
+            trailingContent = {
+                IconButton(onClick = onEdit) {
+                    Icon(Icons.Default.Edit, contentDescription = "Edit", tint = MaterialTheme.colorScheme.primary)
+                }
             }
         )
     }
@@ -244,12 +288,10 @@ fun FavoriteCard(
         enableDismissFromStartToEnd = false,
         backgroundContent = {
             Box(
-                modifier = Modifier.fillMaxSize()
-                    .padding(horizontal = 16.dp),
+                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
                 contentAlignment = Alignment.CenterEnd
             ) {
-                Icon(Icons.Default.Delete, contentDescription = "Delete",
-                    tint = MaterialTheme.colorScheme.error)
+                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
             }
         }
     ) {
@@ -268,7 +310,7 @@ fun FavoriteCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2
                     )
-                    favorite.getOffStopName?.let { dest ->
+                    favorite.effectiveDestinationLabel?.let { dest ->
                         Text(
                             "→ $dest",
                             style = MaterialTheme.typography.bodySmall,
@@ -285,10 +327,7 @@ fun FavoriteCard(
                                     ?: MaterialTheme.colorScheme.primary
                                 val txtColor = dep.routeTextColorInt?.let { Color(it) }
                                     ?: MaterialTheme.colorScheme.onPrimary
-                                Surface(
-                                    color = bgColor,
-                                    shape = RoundedCornerShape(6.dp)
-                                ) {
+                                Surface(color = bgColor, shape = RoundedCornerShape(6.dp)) {
                                     Text(
                                         dep.routeNumber,
                                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
@@ -328,11 +367,7 @@ fun FavoriteCard(
             },
             trailingContent = {
                 IconButton(onClick = onEdit) {
-                    Icon(
-                        Icons.Default.Edit,
-                        contentDescription = "Edit",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                    Icon(Icons.Default.Edit, contentDescription = "Edit", tint = MaterialTheme.colorScheme.primary)
                 }
             },
             modifier = Modifier.clickable(onClick = onTap)

@@ -92,9 +92,16 @@ class FavoritesViewModel(private val repo: FavoritesRepository) : ViewModel() {
         viewModelScope.launch { repo.savePlaces(_favoritePlaces.value + place) }
     }
 
+    fun updateFavoritePlace(place: FavoritePlace) {
+        viewModelScope.launch { repo.savePlaces(_favoritePlaces.value.map { if (it.id == place.id) place else it }) }
+    }
+
     fun deleteFavoritePlace(place: FavoritePlace) {
         viewModelScope.launch { repo.savePlaces(_favoritePlaces.value.filter { it.id != place.id }) }
     }
+
+    suspend fun fetchNearbyStops(lat: Double, lon: Double, radius: Int = 200): List<Stop> =
+        runCatching { api.stopsNearMe(lat, lon, radius) }.getOrDefault(emptyList())
 
     // Add-stop search helper used by AddFavouriteSheet
     suspend fun searchStops(query: String, lat: Double?, lon: Double?): List<Stop> =

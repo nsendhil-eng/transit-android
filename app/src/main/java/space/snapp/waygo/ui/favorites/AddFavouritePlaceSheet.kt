@@ -22,15 +22,24 @@ import space.snapp.waygo.data.models.FavoritePlace
 @Composable
 fun AddFavouritePlaceSheet(
     favoritesVM: FavoritesViewModel,
+    existing: FavoritePlace? = null,
     onDismiss: () -> Unit,
     onSave: (FavoritePlace) -> Unit
 ) {
     val scope = rememberCoroutineScope()
 
-    var name by remember { mutableStateOf("") }
+    var name by remember {
+        mutableStateOf(existing?.name ?: "")
+    }
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<AddressResult>>(emptyList()) }
-    var selectedAddress by remember { mutableStateOf<AddressResult?>(null) }
+    var selectedAddress by remember {
+        mutableStateOf<AddressResult?>(
+            existing?.let {
+                AddressResult(placeId = -1L, displayName = it.displayName, lat = it.lat, lon = it.lon)
+            }
+        )
+    }
     var isSearching by remember { mutableStateOf(false) }
     var searchJob by remember { mutableStateOf<Job?>(null) }
 
@@ -54,7 +63,7 @@ fun AddFavouritePlaceSheet(
                 .navigationBarsPadding()
         ) {
             Text(
-                "Add Favourite Place",
+                if (existing != null) "Edit Favourite Place" else "Add Favourite Place",
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(bottom = 16.dp)
             )
@@ -138,15 +147,9 @@ fun AddFavouritePlaceSheet(
                     ListItem(
                         headlineContent = { Text(addr.shortName) },
                         supportingContent = if (addr.subtitle.isNotEmpty()) ({
-                            Text(
-                                addr.subtitle,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            Text(addr.subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }) else null,
-                        leadingContent = {
-                            Icon(Icons.Default.Place, contentDescription = null)
-                        },
+                        leadingContent = { Icon(Icons.Default.Place, contentDescription = null) },
                         modifier = Modifier.clickable {
                             selectedAddress = addr
                             query = addr.shortName
@@ -164,6 +167,7 @@ fun AddFavouritePlaceSheet(
                     val addr = selectedAddress ?: return@Button
                     onSave(
                         FavoritePlace(
+                            id = existing?.id ?: java.util.UUID.randomUUID().toString(),
                             name = name.trim(),
                             displayName = addr.displayName,
                             lat = addr.lat,
