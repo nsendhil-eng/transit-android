@@ -27,7 +27,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
@@ -36,16 +35,8 @@ import org.osmdroid.views.overlay.Polyline
 import space.snapp.waygo.data.api.TransitApiService
 import space.snapp.waygo.data.api.models.Itinerary
 import space.snapp.waygo.data.api.models.ItineraryLeg
-
-private val CARTO_DARK = XYTileSource(
-    "CartoDB.DarkMatter", 0, 19, 256, ".png",
-    arrayOf(
-        "https://a.basemaps.cartocdn.com/dark_all/",
-        "https://b.basemaps.cartocdn.com/dark_all/",
-        "https://c.basemaps.cartocdn.com/dark_all/"
-    ),
-    "© OpenStreetMap contributors © CARTO"
-)
+import space.snapp.waygo.ui.map.ESRI_DARK_GRAY_BASE
+import space.snapp.waygo.ui.map.addDarkCanvasLabels
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,7 +90,8 @@ fun ItineraryDetailScreen(
             AndroidView(
                 factory = { ctx ->
                     MapView(ctx).apply {
-                        setTileSource(CARTO_DARK)
+                        setTileSource(ESRI_DARK_GRAY_BASE)
+                        addDarkCanvasLabels(ctx)
                         setMultiTouchControls(true)
                         controller.setZoom(13.0)
                         controller.setCenter(GeoPoint(-27.4698, 153.0251))

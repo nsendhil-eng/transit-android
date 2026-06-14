@@ -24,7 +24,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.delay
 import org.osmdroid.config.Configuration
-import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
@@ -41,17 +40,6 @@ import space.snapp.waygo.ui.departures.DeparturesViewModel
 private const val BRISBANE_LAT = -27.4698
 private const val BRISBANE_LON = 153.0251
 private const val STOP_LIVE_REFRESH_MS = 5_000L
-
-private val CARTO_DARK_MATTER = XYTileSource(
-    "CartoDB.DarkMatter",
-    0, 19, 256, ".png",
-    arrayOf(
-        "https://a.basemaps.cartocdn.com/dark_all/",
-        "https://b.basemaps.cartocdn.com/dark_all/",
-        "https://c.basemaps.cartocdn.com/dark_all/"
-    ),
-    "© OpenStreetMap contributors © CARTO"
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -182,7 +170,8 @@ fun NearbyStopsMapView(
     AndroidView(
         factory = { ctx ->
             MapView(ctx).apply {
-                setTileSource(CARTO_DARK_MATTER)
+                setTileSource(ESRI_DARK_GRAY_BASE)
+                addDarkCanvasLabels(ctx)
                 setMultiTouchControls(true)
                 controller.setZoom(16.5)
                 controller.setCenter(GeoPoint(userLat ?: BRISBANE_LAT, userLon ?: BRISBANE_LON))
