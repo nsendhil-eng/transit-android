@@ -41,7 +41,7 @@ fun AddFavouriteSheet(
     // Destinations — migrate legacy single getOff to new list format on first open
     var destinations by remember {
         val initial: List<FavoriteDestination> = when {
-            existing?.destinations?.isNotEmpty() == true -> existing.destinations
+            existing?.destinations?.isNotEmpty() == true -> existing.destinations.orEmpty()
             existing?.getOffStopId != null -> listOf(
                 FavoriteDestination(
                     stopIds = existing.getOffStopId.split(",").map { it.trim() }.filter { it.isNotEmpty() },
