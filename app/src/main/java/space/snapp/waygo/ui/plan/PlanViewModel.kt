@@ -7,7 +7,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import space.snapp.waygo.data.api.NominatimService
+import space.snapp.waygo.data.api.AddressSearch
 import space.snapp.waygo.data.api.TransitApiService
 import space.snapp.waygo.data.api.models.AddressResult
 import space.snapp.waygo.data.api.models.Itinerary
@@ -16,7 +16,6 @@ class PlanViewModel : ViewModel() {
 
     enum class ActiveField { FROM, TO, NONE }
 
-    private val nominatim = NominatimService.instance
     private val api = TransitApiService.instance
 
     val fromQuery = MutableStateFlow("")
@@ -178,17 +177,7 @@ class PlanViewModel : ViewModel() {
         searchJob = viewModelScope.launch {
             delay(350) // debounce — also respects Nominatim's 1 req/s policy
             _isSearching.value = true
-            runCatching { nominatim.search(q.trim()) }
-                .onSuccess { results ->
-                    _suggestions.value = results.map {
-                        AddressResult(
-                            placeId = it.placeId,
-                            displayName = it.displayName,
-                            lat = it.lat.toDoubleOrNull() ?: 0.0,
-                            lon = it.lon.toDoubleOrNull() ?: 0.0
-                        )
-                    }
-                }
+            _suggestions.value = AddressSearch.search(q, userLat, userLon)
             _isSearching.value = false
         }
     }

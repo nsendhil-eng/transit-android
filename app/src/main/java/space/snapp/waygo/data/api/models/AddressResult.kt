@@ -30,3 +30,33 @@ data class NominatimResult(
     @SerializedName("lat") val lat: String,
     @SerializedName("lon") val lon: String
 )
+
+/** Raw shape returned by the Photon GeoJSON API */
+data class PhotonResponse(
+    val features: List<PhotonFeature>? = null
+)
+
+data class PhotonFeature(
+    val geometry: PhotonGeometry? = null,
+    val properties: PhotonProperties? = null
+)
+
+data class PhotonGeometry(
+    // GeoJSON order: [lon, lat]
+    val coordinates: List<Double>? = null
+)
+
+data class PhotonProperties(
+    @SerializedName("osm_type") val osmType: String? = null,
+    @SerializedName("osm_id") val osmId: Long? = null,
+    @SerializedName("osm_key") val osmKey: String? = null,
+    @SerializedName("osm_value") val osmValue: String? = null,
+    val name: String? = null,
+    val housenumber: String? = null,
+    val street: String? = null,
+    val district: String? = null,
+    val locality: String? = null,
+    val city: String? = null,
+    val state: String? = null,
+    val postcode: String? = null
+)

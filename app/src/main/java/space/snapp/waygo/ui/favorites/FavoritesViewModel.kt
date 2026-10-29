@@ -9,7 +9,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import space.snapp.waygo.data.api.NominatimService
+import space.snapp.waygo.data.api.AddressSearch
 import space.snapp.waygo.data.api.TransitApiService
 import space.snapp.waygo.data.api.models.AddressResult
 import space.snapp.waygo.data.api.models.Departure
@@ -20,7 +20,6 @@ import space.snapp.waygo.data.models.FavoriteStop
 
 class FavoritesViewModel(private val repo: FavoritesRepository) : ViewModel() {
     private val api = TransitApiService.instance
-    private val nominatim = NominatimService.instance
 
     private val _favorites = MutableStateFlow<List<FavoriteStop>>(emptyList())
     val favorites = _favorites.asStateFlow()
@@ -109,16 +108,7 @@ class FavoritesViewModel(private val repo: FavoritesRepository) : ViewModel() {
 
     // Address search helper used by AddFavouritePlaceSheet
     suspend fun searchAddresses(query: String): List<AddressResult> =
-        runCatching {
-            nominatim.search(query.trim()).map {
-                AddressResult(
-                    placeId = it.placeId,
-                    displayName = it.displayName,
-                    lat = it.lat.toDoubleOrNull() ?: 0.0,
-                    lon = it.lon.toDoubleOrNull() ?: 0.0
-                )
-            }
-        }.getOrDefault(emptyList())
+        AddressSearch.search(query)
 
     class Factory(private val context: Context) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
