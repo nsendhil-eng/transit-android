@@ -116,6 +116,10 @@ fun WayGoApp() {
 
     // Dismiss trip detail on system back
     BackHandler(enabled = tripDetailArgs != null) { tripDetailArgs = null }
+    // Back from Favourites / Near Me returns to the Search tab before leaving the app
+    BackHandler(enabled = tripDetailArgs == null && currentScreen != Screen.Search) {
+        currentScreen = Screen.Search
+    }
     val tripDetailVM = remember { TripDetailViewModel() }
 
     fun Departure.toTripDetailArgs() = TripDetailArgs(

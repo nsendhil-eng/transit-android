@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -95,8 +96,19 @@ fun SearchScreen(
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
 
+            // Back clears the search, then the selected stops, before leaving the app
+            // (same precedence as the content panel below: results win over selected stops)
+            BackHandler(enabled = !inPlanMode && (query.isNotEmpty() || selectedStops.isNotEmpty())) {
+                if (query.isNotEmpty()) viewModel.onQueryChange("") else viewModel.clearAll()
+            }
+
             // Floating search bar OR plan mode card
             if (inPlanMode) {
+                // Back closes plan mode instead of leaving the app (itinerary detail has its own handler)
+                BackHandler(enabled = selectedItinerary == null) {
+                    inPlanMode = false
+                    planViewModel.reset()
+                }
                 PlanCard(
                     viewModel = planViewModel,
                     userLat = userLat,
