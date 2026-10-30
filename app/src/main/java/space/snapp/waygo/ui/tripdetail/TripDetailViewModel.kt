@@ -42,6 +42,44 @@ class TripDetailViewModel : ViewModel() {
         startRefresh()
     }
 
+    // One-off messages for the screen (e.g. no trips in the other direction)
+    private val _notice = MutableStateFlow<String?>(null)
+    val notice: StateFlow<String?> = _notice
+
+    fun clearNotice() { _notice.value = null }
+
+    /**
+     * Show the same route in the opposite direction, anchored on the user's nearest stop.
+     * Fetches first and only switches on success, so a direction with no more trips today
+     * (e.g. peak-only routes) leaves the current trip on screen instead of an empty error.
+     */
+    fun switchDirection() {
+        val params = loadParams ?: return
+        val info = _tripDetail.value?.tripInfo ?: return
+        viewModelScope.launch {
+            runCatching {
+                api.tripStops(
+                    routeId = info.routeId,
+                    directionId = 1 - info.directionId,
+                    userLat = params.userLat,
+                    userLon = params.userLon
+                )
+            }.onSuccess { detail ->
+                loadParams = params.copy(
+                    tripId = detail.tripInfo.tripId,
+                    routeId = detail.tripInfo.routeId,
+                    directionId = detail.tripInfo.directionId
+                )
+                _tripDetail.value = detail
+                _nextTrips.value = emptyList()
+                startRefresh()
+            }.onFailure { e ->
+                if (e is CancellationException) throw e
+                _notice.value = "No more trips in the other direction today"
+            }
+        }
+    }
+
     fun switchTrip(newTripId: String) {
         loadParams = loadParams?.copy(tripId = newTripId)
             ?: LoadParams(newTripId, "", 0, null, null)
