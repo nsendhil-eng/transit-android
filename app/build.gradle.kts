@@ -49,4 +49,5 @@ dependencies {
     implementation(libs.play.services.location)
     implementation(libs.datastore.preferences)
     implementation(libs.osmdroid)
+    testImplementation("junit:junit:4.13.2")
 }

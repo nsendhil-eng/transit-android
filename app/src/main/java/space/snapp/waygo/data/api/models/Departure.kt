@@ -20,7 +20,10 @@ data class Departure(
     val platformCode: String?,
     val routeColor: String?,
     val routeTextColor: String?,
-    val routeLongName: String?
+    val routeLongName: String?,
+    // Nullable: older API responses omit these
+    val isRealtime: Boolean? = null,
+    val delaySeconds: Int? = null
 ) {
     val id: String get() = "$tripId-$stopId"
 
