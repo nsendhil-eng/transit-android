@@ -97,7 +97,8 @@ fun DepartureRow(departure: Departure, onClick: (() -> Unit)? = null) {
                 )
                 Spacer(Modifier.width(4.dp))
                 Text(
-                    departure.stopName + if (departure.platformCode != null) " · Plat ${departure.platformCode}" else "",
+                    // Buses send platform_code as "", not null — don't render a bare "· Plat"
+                    departure.stopName + if (!departure.platformCode.isNullOrBlank()) " · Plat ${departure.platformCode}" else "",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
