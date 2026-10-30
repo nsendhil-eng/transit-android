@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,6 +20,9 @@ import space.snapp.waygo.data.local.FavoritesRepository
 import space.snapp.waygo.data.models.FavoritePlace
 import space.snapp.waygo.data.models.FavoriteStop
 
+// Each row previews two departures; a few per stop leaves room after sorting across stops
+private const val PREVIEW_PER_STOP = 3
+
 class FavoritesViewModel(private val repo: FavoritesRepository) : ViewModel() {
     private val api = TransitApiService.instance
 
@@ -27,7 +32,9 @@ class FavoritesViewModel(private val repo: FavoritesRepository) : ViewModel() {
     private val _favoritePlaces = MutableStateFlow<List<FavoritePlace>>(emptyList())
     val favoritePlaces = _favoritePlaces.asStateFlow()
 
-    // Departures for all favourites, keyed by stop_id — refreshed every 10 s
+    // Preview departures for each favourite, keyed by favourite id — refreshed every 10 s.
+    // Keyed per favourite (not per stop) because two favourites can share a stop with
+    // different destinations, so the same stop can have different valid departures.
     private val _favDepartures = MutableStateFlow<Map<String, List<Departure>>>(emptyMap())
     val favDepartures = _favDepartures.asStateFlow()
 
@@ -55,14 +62,45 @@ class FavoritesViewModel(private val repo: FavoritesRepository) : ViewModel() {
     fun stopDeparturePolling() { pollingJob?.cancel() }
 
     private suspend fun fetchAllDepartures() {
-        val codes = _favorites.value
-            .flatMap { it.stops }
-            .mapNotNull { it.stopCode?.takeIf(String::isNotBlank) }
-            .distinct()
-        if (codes.isEmpty()) return
-        runCatching { api.departures(codes.joinToString(","), perStop = 3) }
-            .onSuccess { deps -> _favDepartures.value = deps.groupBy { it.stopId } }
+        val favorites = _favorites.value
+        val (withDestination, plain) = favorites.partition { it.effectiveGetOffStopId != null }
+        // Keep the last good preview for any favourite whose request fails this round
+        val result = _favDepartures.value.filterKeys { id -> favorites.any { it.id == id } }.toMutableMap()
+
+        coroutineScope {
+            // Favourites without a destination share one request across all their stops
+            val plainJob = async {
+                val codes = plain.flatMap { it.stopCodes() }.distinct()
+                if (codes.isEmpty()) null
+                else runCatching { api.departures(codes.joinToString(","), perStop = PREVIEW_PER_STOP) }.getOrNull()
+            }
+            // With a destination, only trips that call there count — the same filter the
+            // departures sheet uses, so the row and sheet agree
+            val destinationJobs = withDestination.associate { fav ->
+                fav.id to async {
+                    val codes = fav.stopCodes()
+                    if (codes.isEmpty()) emptyList()
+                    else runCatching {
+                        api.departures(
+                            codes.joinToString(","),
+                            perStop = PREVIEW_PER_STOP,
+                            getOffStop = fav.effectiveGetOffStopId
+                        )
+                    }.getOrNull()
+                }
+            }
+
+            plainJob.await()?.let { deps ->
+                val byStop = deps.groupBy { it.stopId }
+                plain.forEach { fav -> result[fav.id] = fav.stops.flatMap { byStop[it.id].orEmpty() } }
+            }
+            destinationJobs.forEach { (id, job) -> job.await()?.let { result[id] = it } }
+        }
+        _favDepartures.value = result
     }
+
+    private fun FavoriteStop.stopCodes(): List<String> =
+        stops.mapNotNull { it.stopCode?.takeIf(String::isNotBlank) }.distinct()
 
     override fun onCleared() {
         super.onCleared()

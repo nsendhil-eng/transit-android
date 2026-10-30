@@ -99,9 +99,7 @@ fun FavoritesScreen(
                     HorizontalDivider()
                 }
                 items(favorites, key = { "stop_${it.id}" }) { fav ->
-                    val preview = favDepartures
-                        .filter { (stopId, _) -> fav.stops.any { it.id == stopId } }
-                        .values.flatten()
+                    val preview = favDepartures[fav.id].orEmpty()
                         .sortedBy { it.liveSeconds }
                         .take(2)
                     FavoriteCard(
