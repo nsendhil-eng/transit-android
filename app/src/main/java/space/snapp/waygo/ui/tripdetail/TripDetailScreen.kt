@@ -70,6 +70,7 @@ import space.snapp.waygo.ui.components.LiveIndicator
 import space.snapp.waygo.ui.components.delayLabel
 import space.snapp.waygo.ui.map.ESRI_DARK_GRAY_BASE
 import space.snapp.waygo.ui.map.addDarkCanvasLabels
+import space.snapp.waygo.ui.map.createVehicleMarkerIcon
 import java.util.Calendar
 import java.util.Date
 
@@ -934,15 +935,18 @@ private fun rebuildTripMap(
         })
     }
 
-    // Vehicle marker on top: route number in a pill, bearing arrow, data age
+    // Vehicle marker on top: route pill with direction arrow and data age
     detail.vehicle?.let { v ->
         map.overlays.add(Marker(map).apply {
             position = GeoPoint(v.lat, v.lon)
-            icon = createTripVehicleIcon(
-                context, routeColorInt, routeTextColorInt, v.bearing,
+            icon = createVehicleMarkerIcon(
+                context,
                 // No text on rail markers: their short names are internal codes
-                if (isRail(detail.tripInfo.routeType)) "" else detail.tripInfo.routeShortName,
-                v.ageSeconds?.let { formatAge(it).removeSuffix(" ago") }
+                label = if (isRail(detail.tripInfo.routeType)) "" else detail.tripInfo.routeShortName,
+                routeColor = routeColorInt,
+                routeTextColor = routeTextColorInt,
+                heading = v.heading,
+                age = v.ageSeconds?.let { formatAge(it).removeSuffix(" ago") }
             )
             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
             setInfoWindow(null)
@@ -980,72 +984,6 @@ private fun createUserDotIcon(context: android.content.Context): BitmapDrawable 
     paint.style = Paint.Style.STROKE
     paint.strokeWidth = 1.5f * dp
     canvas.drawCircle(size / 2f, size / 2f, size / 3.5f, paint)
-    return BitmapDrawable(context.resources, bitmap)
-}
-
-/** Route-coloured disc with the route number, a bearing arrow on its rim and an age badge below. */
-private fun createTripVehicleIcon(
-    context: android.content.Context,
-    routeColorInt: Int,
-    routeTextColorInt: Int,
-    bearing: Float,
-    routeShortName: String,
-    age: String?
-): BitmapDrawable {
-    val dp = context.resources.displayMetrics.density
-    val discSize = 40 * dp
-    val badgeH = if (age != null) 16 * dp else 0f
-    val w = (discSize + 12 * dp).toInt()
-    val h = (discSize + 12 * dp + badgeH).toInt()
-    val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-    val canvas = AndroidCanvas(bitmap)
-    val cx = w / 2f
-    val cy = (discSize + 12 * dp) / 2f
-    val radius = discSize / 2f
-
-    // Bearing arrow just outside the disc
-    canvas.save()
-    canvas.rotate(bearing, cx, cy)
-    val arrow = AndroidPath().apply {
-        moveTo(cx, cy - radius - 6 * dp)
-        lineTo(cx - 6 * dp, cy - radius + 2 * dp)
-        lineTo(cx + 6 * dp, cy - radius + 2 * dp)
-        close()
-    }
-    canvas.drawPath(arrow, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = routeColorInt })
-    canvas.restore()
-
-    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    paint.color = routeColorInt
-    canvas.drawCircle(cx, cy, radius, paint)
-    paint.color = AndroidColor.WHITE
-    paint.style = Paint.Style.STROKE
-    paint.strokeWidth = 2.5f * dp
-    canvas.drawCircle(cx, cy, radius, paint)
-
-    val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = routeTextColorInt
-        textSize = (if (routeShortName.length > 3) 11f else 14f) * dp
-        typeface = android.graphics.Typeface.DEFAULT_BOLD
-        textAlign = Paint.Align.CENTER
-    }
-    canvas.drawText(routeShortName, cx, cy - (text.descent() + text.ascent()) / 2, text)
-
-    if (age != null) {
-        val badgeText = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = AndroidColor.WHITE
-            textSize = 10f * dp
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
-            textAlign = Paint.Align.CENTER
-        }
-        val bw = badgeText.measureText(age) + 10 * dp
-        val top = cy + radius - 2 * dp
-        canvas.drawRoundRect(
-            cx - bw / 2, top, cx + bw / 2, top + badgeH, 8 * dp, 8 * dp,
-            Paint(Paint.ANTI_ALIAS_FLAG).apply { color = AndroidColor.argb(220, 20, 20, 20) }
-        )
-        canvas.drawText(age, cx, top + badgeH / 2 - (badgeText.descent() + badgeText.ascent()) / 2, badgeText)
-    }
     return BitmapDrawable(context.resources, bitmap)
 }
 

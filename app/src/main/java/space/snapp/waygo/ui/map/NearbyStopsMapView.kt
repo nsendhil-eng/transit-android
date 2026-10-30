@@ -127,10 +127,20 @@ fun NearbyStopsMapView(
 
             // Vehicle marker (only if real-time position available and not past stop)
             trip.vehicle?.let { v ->
+                val textColor = trip.routeTextColor?.let {
+                    runCatching { AndroidColor.parseColor("#${it.trimStart('#')}") }.getOrNull()
+                } ?: if (androidx.core.graphics.ColorUtils.calculateLuminance(routeColorInt) > 0.5) AndroidColor.BLACK else AndroidColor.WHITE
                 val marker = Marker(map).apply {
                     position = GeoPoint(v.lat, v.lon)
-                    icon = createVehicleIcon(context, trip)
-                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                    icon = createVehicleMarkerIcon(
+                        context,
+                        // Rail short names are internal codes (SPRP, NAIP) — arrow badge only
+                        label = if (trip.routeType == 1 || trip.routeType == 2) "" else trip.routeShortName,
+                        routeColor = routeColorInt,
+                        routeTextColor = textColor,
+                        heading = v.heading
+                    )
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                     setInfoWindow(null)
                 }
                 map.overlays.add(marker)
@@ -199,53 +209,6 @@ fun NearbyStopsMapView(
             )
         }
     }
-}
-
-// ---------------------------------------------------------------------------
-// Vehicle marker — coloured pill badge with route name + downward arrow anchor
-// ---------------------------------------------------------------------------
-
-private fun createVehicleIcon(context: android.content.Context, trip: TripLive): BitmapDrawable {
-    val dp = context.resources.displayMetrics.density
-    val label = trip.routeShortName.ifBlank { "?" }.take(8)
-
-    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = AndroidColor.WHITE
-        textSize = 9f * dp
-        typeface = Typeface.DEFAULT_BOLD
-        textAlign = Paint.Align.CENTER
-    }
-    val textW = textPaint.measureText(label)
-    val padH = 7f * dp
-    val padV = 4f * dp
-    val arrowH = 5f * dp
-    val bodyW = maxOf(textW + padH * 2, 20f * dp)
-    val bodyH = (-textPaint.ascent() + textPaint.descent()) + padV * 2
-    val totalH = bodyH + arrowH
-
-    val bW = bodyW.toInt().coerceAtLeast(1)
-    val bH = totalH.toInt().coerceAtLeast(1)
-    val bitmap = Bitmap.createBitmap(bW, bH, Bitmap.Config.ARGB_8888)
-    val canvas = AndroidCanvas(bitmap)
-
-    val bgColor = trip.routeColor?.let {
-        runCatching { AndroidColor.parseColor("#${it.trimStart('#')}") }.getOrNull()
-    } ?: AndroidColor.rgb(33, 150, 243)
-
-    val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = bgColor; style = Paint.Style.FILL }
-
-    canvas.drawRoundRect(0f, 0f, bodyW, bodyH, 5f * dp, 5f * dp, bgPaint)
-
-    val arrowPath = Path().apply {
-        moveTo(bodyW / 2f - arrowH, bodyH)
-        lineTo(bodyW / 2f + arrowH, bodyH)
-        lineTo(bodyW / 2f, bodyH + arrowH)
-        close()
-    }
-    canvas.drawPath(arrowPath, bgPaint)
-    canvas.drawText(label, bodyW / 2f, padV + (-textPaint.ascent()), textPaint)
-
-    return BitmapDrawable(context.resources, bitmap)
 }
 
 // ---------------------------------------------------------------------------
