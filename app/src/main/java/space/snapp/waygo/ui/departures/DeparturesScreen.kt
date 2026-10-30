@@ -1,129 +1,83 @@
 package space.snapp.waygo.ui.departures
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import space.snapp.waygo.data.api.models.Departure
 import space.snapp.waygo.data.api.models.Stop
+import space.snapp.waygo.ui.routecards.RouteCardList
+import space.snapp.waygo.ui.routecards.buildRouteGroups
+import space.snapp.waygo.ui.routecards.rememberNow
 
+/**
+ * Departures for a set of stops (a map stop / station, selected search stops, or a favourite),
+ * shown as one route card per route + direction — the same cards as Near Me.
+ */
 @Composable
 fun DeparturesScreen(
     viewModel: DeparturesViewModel,
     stops: List<Stop>,
     getOffStopId: String? = null,
-    onDepartureClick: ((Departure) -> Unit)? = null
+    onDepartureClick: ((Departure) -> Unit)? = null,
+    // False when stop distances aren't relative to where the user is now (saved favourites
+    // keep the distance from when they were added) — hides walk times and sorts by time only
+    useStopDistances: Boolean = true
 ) {
     val departures by viewModel.departures.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
-    val routeFilter by viewModel.routeFilter.collectAsState()
+    val now = rememberNow()
 
     LaunchedEffect(stops, getOffStopId) {
         viewModel.startAutoRefresh(stops, getOffStopId)
     }
     DisposableEffect(Unit) { onDispose { viewModel.stopAutoRefresh() } }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Route filter — capsule buttons matching iOS RouteFilterBar
-        val routes = viewModel.availableRoutes
-        if (routes.isNotEmpty()) {
-            Row(
-                modifier = Modifier
-                    .horizontalScroll(rememberScrollState())
-                    .background(MaterialTheme.colorScheme.surface)
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // "All" capsule
-                RouteFilterCapsule(
-                    label = "All",
-                    active = routeFilter == null,
-                    onClick = { viewModel.setRouteFilter(null) }
-                )
-                routes.forEach { route ->
-                    RouteFilterCapsule(
-                        label = route,
-                        active = routeFilter == route,
-                        onClick = { viewModel.setRouteFilter(if (routeFilter == route) null else route) }
-                    )
-                }
-            }
-            HorizontalDivider()
-        }
-
-        when {
-            error != null && departures.isEmpty() -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Failed to load departures", style = MaterialTheme.typography.bodyLarge)
-                        Spacer(Modifier.height(8.dp))
-                        Button(onClick = { viewModel.startAutoRefresh(stops, getOffStopId) }) {
-                            Icon(Icons.Default.Refresh, contentDescription = null)
-                            Spacer(Modifier.width(4.dp))
-                            Text("Retry")
-                        }
-                    }
-                }
-            }
-            isLoading && departures.isEmpty() -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            }
-            departures.isEmpty() -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No departures found", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            else -> {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    val filtered = viewModel.filteredDepartures
-                    items(filtered, key = { it.id }) { dep ->
-                        space.snapp.waygo.ui.components.DepartureRow(
-                            departure = dep,
-                            onClick = onDepartureClick?.let { cb -> { cb(dep) } }
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    }
-                }
-            }
-        }
+    val groups = remember(departures, stops, now, useStopDistances) {
+        val groupingStops = if (useStopDistances) stops else stops.map { it.copy(distanceMeters = null) }
+        buildRouteGroups(departures, groupingStops, null, now)
     }
-}
+    // Name the stop on each card only when it isn't obvious from context: several separate
+    // stops (e.g. both sides of the road). Platforms of one station still show "Platform N".
+    val distinctPlaces = remember(stops) {
+        stops.map { it.parentStation?.takeIf { p -> p.isNotEmpty() } ?: it.id }.distinct().size
+    }
 
-@Composable
-private fun RouteFilterCapsule(label: String, active: Boolean, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(50)
-    Box(
-        modifier = Modifier
-            .clip(shape)
-            .background(
-                if (active) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.surfaceVariant
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-            color = if (active) MaterialTheme.colorScheme.onPrimary
-                    else MaterialTheme.colorScheme.onSurfaceVariant
+    when {
+        error != null && departures.isEmpty() -> {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Failed to load departures", style = MaterialTheme.typography.bodyLarge)
+                    Spacer(Modifier.height(8.dp))
+                    Button(onClick = { viewModel.startAutoRefresh(stops, getOffStopId) }) {
+                        Icon(Icons.Default.Refresh, contentDescription = null)
+                        Spacer(Modifier.width(4.dp))
+                        Text("Retry")
+                    }
+                }
+            }
+        }
+        isLoading && departures.isEmpty() -> {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        }
+        groups.isEmpty() -> {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No upcoming departures", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        else -> RouteCardList(
+            groups = groups,
+            now = now,
+            onDepartureClick = onDepartureClick,
+            modifier = Modifier.fillMaxSize(),
+            showStopName = distinctPlaces > 1
         )
     }
 }

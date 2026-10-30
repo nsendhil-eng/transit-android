@@ -11,6 +11,9 @@ import space.snapp.waygo.data.api.TransitApiService
 import space.snapp.waygo.data.api.models.Departure
 import space.snapp.waygo.data.api.models.Stop
 
+// Per stop, so every route at a busy stop gets its next three departures for the cards
+private const val DEPARTURES_PER_STOP = 12
+
 class DeparturesViewModel : ViewModel() {
     private val api = TransitApiService.instance
 
@@ -23,22 +26,13 @@ class DeparturesViewModel : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
 
-    private val _routeFilter = MutableStateFlow<String?>(null)
-    val routeFilter = _routeFilter.asStateFlow()
-
     private var refreshJob: Job? = null
     private var currentStops: List<Stop> = emptyList()
     private var currentGetOffStopId: String? = null
 
-    val filteredDepartures get() = _departures.value.filter { dep ->
-        _routeFilter.value == null || dep.routeNumber == _routeFilter.value
-    }
-
-    val availableRoutes get() = _departures.value.map { it.routeNumber }.distinct().sorted()
-
-    fun setRouteFilter(route: String?) { _routeFilter.value = route }
-
     fun startAutoRefresh(stops: List<Stop>, getOffStopId: String? = null) {
+        // Switching stops: drop the old stop's departures so they don't flash as cards
+        if (stops != currentStops || getOffStopId != currentGetOffStopId) _departures.value = emptyList()
         currentStops = stops
         currentGetOffStopId = getOffStopId
         _isLoading.value = true   // show spinner immediately, before coroutine fires
@@ -54,12 +48,18 @@ class DeparturesViewModel : ViewModel() {
     fun stopAutoRefresh() { refreshJob?.cancel() }
 
     private suspend fun fetch() {
-        val codes = currentStops.mapNotNull { it.stopCode }
-        if (codes.isEmpty()) return
+        val codes = currentStops.mapNotNull { it.stopCode?.takeIf(String::isNotBlank) }
+        if (codes.isEmpty()) {
+            // Nothing to ask for: show "No upcoming departures" rather than an endless spinner
+            _departures.value = emptyList()
+            _isLoading.value = false
+            return
+        }
         _isLoading.value = true
         runCatching {
             api.departures(
                 stops = codes.joinToString(","),
+                perStop = DEPARTURES_PER_STOP,
                 getOffStop = currentGetOffStopId
             )
         }.onSuccess {

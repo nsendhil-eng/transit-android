@@ -8,8 +8,6 @@ import android.graphics.Path
 import android.graphics.Typeface
 import android.graphics.drawable.BitmapDrawable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
@@ -357,18 +355,9 @@ private fun StopGroupSheet(
                 Text("Add")
             }
         }
-        if (group.isMultiPlatform) {
-            LazyRow(contentPadding = PaddingValues(horizontal = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.padding(bottom = 8.dp)) {
-                items(group.stops) { stop ->
-                    SuggestionChip(onClick = {},
-                        label = { Text(stop.name, style = MaterialTheme.typography.labelSmall) })
-                }
-            }
-        }
+        // Route cards show each service's platform, so no per-platform chips here
         HorizontalDivider()
-        Box(modifier = Modifier.height(320.dp)) {
+        Box(modifier = Modifier.height(440.dp)) {
             DeparturesScreen(
                 viewModel = depsVM,
                 stops = group.stops,

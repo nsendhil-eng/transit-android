@@ -197,7 +197,8 @@ fun FavoritesScreen(
                         onDepartureClick = { dep ->
                             selectedFavorite = null
                             onDepartureClick?.invoke(dep)
-                        }
+                        },
+                        useStopDistances = false
                     )
                 }
             }
