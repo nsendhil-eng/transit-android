@@ -16,7 +16,9 @@ data class StopGroup(
 }
 
 fun groupStops(stops: List<Stop>): List<StopGroup> {
-    val usable = stops.filter { it.stopCode != null }
+    // Parent-station records (e.g. "place_regaft") come back with stop_code "" — they have no
+    // departures of their own and would add a second, empty marker on top of the real stop
+    val usable = stops.filter { !it.stopCode.isNullOrBlank() }
     val grouped = mutableMapOf<String, MutableList<Stop>>()
     val standalone = mutableListOf<Stop>()
 

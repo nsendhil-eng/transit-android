@@ -50,7 +50,7 @@ class SearchViewModel : ViewModel() {
                 _results.value = response
                 _hasSearched.value = true
                 // Inline departures
-                val codes = response.stops.mapNotNull { it.stopCode }
+                val codes = response.stops.mapNotNull { it.stopCode?.takeIf(String::isNotBlank) }
                 if (codes.isNotEmpty()) {
                     runCatching { api.departures(codes.joinToString(","), perStop = 3) }
                         .onSuccess { deps ->

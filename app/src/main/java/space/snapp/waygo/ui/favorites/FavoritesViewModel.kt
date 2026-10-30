@@ -57,7 +57,7 @@ class FavoritesViewModel(private val repo: FavoritesRepository) : ViewModel() {
     private suspend fun fetchAllDepartures() {
         val codes = _favorites.value
             .flatMap { it.stops }
-            .mapNotNull { it.stopCode }
+            .mapNotNull { it.stopCode?.takeIf(String::isNotBlank) }
             .distinct()
         if (codes.isEmpty()) return
         runCatching { api.departures(codes.joinToString(","), perStop = 3) }
