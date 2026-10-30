@@ -66,6 +66,8 @@ import space.snapp.waygo.data.api.models.NextTrip
 import space.snapp.waygo.data.api.models.TripDetailResponse
 import space.snapp.waygo.data.api.models.TripStop
 import space.snapp.waygo.data.api.models.TripVehicle
+import space.snapp.waygo.ui.components.LiveIndicator
+import space.snapp.waygo.ui.components.delayLabel
 import space.snapp.waygo.ui.map.ESRI_DARK_GRAY_BASE
 import space.snapp.waygo.ui.map.addDarkCanvasLabels
 import java.util.Calendar
@@ -78,11 +80,6 @@ data class TripDetailArgs(
     val routeShortName: String,
     val headsign: String
 )
-
-// Status colours for live times
-private val OnTimeGreen = Color(0xFF4CAF50)
-private val LateAmber = Color(0xFFFFA726)
-private val EarlyBlue = Color(0xFF64B5F6)
 
 private const val WALK_METRES_PER_MIN = 80.0
 
@@ -192,16 +189,20 @@ fun TripDetailScreen(
                             modifier = Modifier.fillMaxWidth().padding(32.dp)
                         )
 
-                        tripDetail != null -> TripSheetContent(
-                            detail = tripDetail!!,
-                            nextTrips = nextTrips,
-                            routeColor = routeColor,
-                            routeTextColor = routeTextColor,
-                            userLat = userLat,
-                            userLon = userLon,
-                            now = now,
-                            onSelectTrip = viewModel::switchTrip
-                        )
+                        tripDetail != null -> CompositionLocalProvider(
+                            LocalVehicleIcon provides vehicleIcon(info?.routeType)
+                        ) {
+                            TripSheetContent(
+                                detail = tripDetail!!,
+                                nextTrips = nextTrips,
+                                routeColor = routeColor,
+                                routeTextColor = routeTextColor,
+                                userLat = userLat,
+                                userLon = userLon,
+                                now = now,
+                                onSelectTrip = viewModel::switchTrip
+                            )
+                        }
                     }
                 }
             }
@@ -285,19 +286,29 @@ private fun TripHeader(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    vehicleIcon(routeType),
-                    contentDescription = null,
-                    tint = routeTextColor,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    routeShortName,
-                    color = routeTextColor,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
+                if (isRail(routeType)) {
+                    // Rail short names are internal codes (SPRP, NAIP) — icon only, same as Near Me
+                    Icon(
+                        vehicleIcon(routeType),
+                        contentDescription = "Train",
+                        tint = routeTextColor,
+                        modifier = Modifier.size(28.dp).padding(vertical = 2.dp)
+                    )
+                } else {
+                    Icon(
+                        vehicleIcon(routeType),
+                        contentDescription = null,
+                        tint = routeTextColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        routeShortName,
+                        color = routeTextColor,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
             }
         }
         Spacer(Modifier.width(10.dp))
@@ -749,6 +760,9 @@ private fun VehicleBetweenRow(vehicle: TripVehicle?, routeColor: Color, routeTex
     }
 }
 
+// Icon for the live vehicle on the timeline (bus / train / ferry / tram), set per trip
+private val LocalVehicleIcon = staticCompositionLocalOf { Icons.Default.DirectionsBus }
+
 @Composable
 private fun VehicleBadge(routeColor: Color, routeTextColor: Color) {
     Surface(
@@ -758,36 +772,7 @@ private fun VehicleBadge(routeColor: Color, routeTextColor: Color) {
         modifier = Modifier.size(30.dp)
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.DirectionsBus, contentDescription = "Vehicle", tint = routeTextColor, modifier = Modifier.size(18.dp))
-        }
-    }
-}
-
-/** Pulsing "broadcast" arcs marking live GTFS-RT data. */
-@Composable
-private fun LiveIndicator(color: Color, modifier: Modifier = Modifier) {
-    val transition = rememberInfiniteTransition(label = "live")
-    val alpha by transition.animateFloat(
-        initialValue = 0.4f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
-        label = "liveAlpha"
-    )
-    Canvas(modifier = modifier) {
-        val stroke = size.minDimension * 0.14f
-        val origin = Offset(0f, size.height)
-        drawCircle(color, radius = stroke * 0.9f, center = Offset(stroke, size.height - stroke))
-        listOf(0.55f, 0.95f).forEach { r ->
-            val radius = size.minDimension * r
-            drawArc(
-                color = color.copy(alpha = alpha),
-                startAngle = -90f,
-                sweepAngle = 90f,
-                useCenter = false,
-                topLeft = Offset(origin.x - radius, origin.y - radius),
-                size = androidx.compose.ui.geometry.Size(radius * 2, radius * 2),
-                style = Stroke(stroke, cap = StrokeCap.Round)
-            )
+            Icon(LocalVehicleIcon.current, contentDescription = "Vehicle", tint = routeTextColor, modifier = Modifier.size(18.dp))
         }
     }
 }
@@ -805,17 +790,6 @@ private fun DottedLine(color: Color, modifier: Modifier = Modifier) {
 }
 
 // ── Formatting helpers ─────────────────────────────────────────────────────
-
-/** "On time" / "3 min late" / "2 min early" / "Scheduled", with a status colour. */
-private fun delayLabel(isLive: Boolean, delaySeconds: Int?): Pair<String, Color?> {
-    if (!isLive) return "Scheduled" to null
-    val d = delaySeconds ?: 0
-    return when {
-        d >= 60 -> "${(d + 30) / 60} min late" to LateAmber
-        d <= -60 -> "${(-d + 30) / 60} min early" to EarlyBlue
-        else -> "On time" to OnTimeGreen
-    }
-}
 
 private fun formatAge(seconds: Int): String = when {
     seconds < 60 -> "${seconds}s ago"
@@ -850,6 +824,8 @@ private fun walkMinutes(userLat: Double?, userLon: Double?, stop: TripStop): Int
     if (metres > 2000) return null
     return (metres / WALK_METRES_PER_MIN).toInt().coerceAtLeast(1)
 }
+
+private fun isRail(routeType: Int?): Boolean = routeType == 1 || routeType == 2
 
 private fun vehicleIcon(routeType: Int?): ImageVector = when (routeType) {
     0 -> Icons.Default.Tram
@@ -964,7 +940,9 @@ private fun rebuildTripMap(
             position = GeoPoint(v.lat, v.lon)
             icon = createTripVehicleIcon(
                 context, routeColorInt, routeTextColorInt, v.bearing,
-                detail.tripInfo.routeShortName, v.ageSeconds?.let { formatAge(it).removeSuffix(" ago") }
+                // No text on rail markers: their short names are internal codes
+                if (isRail(detail.tripInfo.routeType)) "" else detail.tripInfo.routeShortName,
+                v.ageSeconds?.let { formatAge(it).removeSuffix(" ago") }
             )
             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
             setInfoWindow(null)
