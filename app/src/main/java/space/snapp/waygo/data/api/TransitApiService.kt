@@ -6,6 +6,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
 import retrofit2.http.Query
+import space.snapp.waygo.data.api.models.AlertsResponse
 import space.snapp.waygo.data.api.models.Departure
 import space.snapp.waygo.data.api.models.NextTripsResponse
 import space.snapp.waygo.data.api.models.PlanDelayResponse
@@ -73,6 +74,12 @@ interface TransitApiService {
         @Query("direction_id") directionId: Int,
         @Query("stop_id") stopId: String
     ): NextTripsResponse
+
+    @GET("/api/alerts")
+    suspend fun alerts(
+        @Query("route_ids") routeIds: String? = null,
+        @Query("stop_ids") stopIds: String? = null
+    ): AlertsResponse
 
     @GET("/api/plan-delays")
     suspend fun planDelays(

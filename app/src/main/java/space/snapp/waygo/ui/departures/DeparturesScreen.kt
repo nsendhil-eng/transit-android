@@ -1,6 +1,8 @@
 package space.snapp.waygo.ui.departures
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
@@ -10,6 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import space.snapp.waygo.data.api.models.Departure
 import space.snapp.waygo.data.api.models.Stop
+import space.snapp.waygo.ui.alerts.AlertBannerArea
+import space.snapp.waygo.ui.alerts.rememberServiceAlerts
 import space.snapp.waygo.ui.routecards.RouteCardList
 import space.snapp.waygo.ui.routecards.buildRouteGroups
 import space.snapp.waygo.ui.routecards.rememberNow
@@ -47,11 +51,31 @@ fun DeparturesScreen(
     val distinctPlaces = remember(stops) {
         stops.map { it.parentStation?.takeIf { p -> p.isNotEmpty() } ?: it.id }.distinct().size
     }
+    // Stop ids alone are enough: the API adds every route serving them, so a closed
+    // station with no departures still shows its track-work alert
+    val alerts = rememberServiceAlerts(routeIds = departures.map { it.routeId }, stopIds = stops.map { it.id })
 
     when {
-        error != null && departures.isEmpty() -> {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        groups.isNotEmpty() -> RouteCardList(
+            groups = groups,
+            now = now,
+            onDepartureClick = onDepartureClick,
+            modifier = Modifier.fillMaxSize(),
+            showStopName = distinctPlaces > 1,
+            disruptedRouteIds = alerts.disruptedRouteIds,
+            // Banner scrolls with the cards
+            header = { AlertBannerArea(alerts) }
+        )
+        // No cards (loading, error or nothing running): the banner and the state message share
+        // one scrolling column, so an alert explains "no trains" and stays readable expanded
+        else -> Column(
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            AlertBannerArea(alerts, Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+            Spacer(Modifier.height(if (alerts.visible.isEmpty()) 120.dp else 32.dp))
+            when {
+                error != null && departures.isEmpty() -> {
                     Text("Failed to load departures", style = MaterialTheme.typography.bodyLarge)
                     Spacer(Modifier.height(8.dp))
                     Button(onClick = { viewModel.startAutoRefresh(stops, getOffStopId) }) {
@@ -60,24 +84,9 @@ fun DeparturesScreen(
                         Text("Retry")
                     }
                 }
+                isLoading && departures.isEmpty() -> CircularProgressIndicator()
+                else -> Text("No upcoming departures", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        isLoading && departures.isEmpty() -> {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        }
-        groups.isEmpty() -> {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No upcoming departures", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        else -> RouteCardList(
-            groups = groups,
-            now = now,
-            onDepartureClick = onDepartureClick,
-            modifier = Modifier.fillMaxSize(),
-            showStopName = distinctPlaces > 1
-        )
     }
 }

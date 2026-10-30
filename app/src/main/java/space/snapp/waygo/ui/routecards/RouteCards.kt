@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DirectionsWalk
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -51,7 +52,11 @@ fun RouteCardList(
     now: Long,
     onDepartureClick: ((Departure) -> Unit)?,
     modifier: Modifier = Modifier,
-    showStopName: Boolean = true
+    showStopName: Boolean = true,
+    // Routes with a current service disruption (from service alerts) get a ⚠ on their card
+    disruptedRouteIds: Set<String> = emptySet(),
+    // Optional content above the cards (e.g. an alert banner), scrolling with them
+    header: (@Composable () -> Unit)? = null
 ) {
     // Cards re-sort as countdowns tick. LazyColumn anchors on the first visible key, so
     // when a card moves above it the list silently scrolls down; pin to the top instead
@@ -67,8 +72,15 @@ fun RouteCardList(
         verticalArrangement = Arrangement.spacedBy(10.dp),
         modifier = modifier
     ) {
+        if (header != null) item(key = "header") { header() }
         items(groups, key = { it.key }) { group ->
-            RouteGroupCard(group = group, now = now, onDepartureClick = onDepartureClick, showStopName = showStopName)
+            RouteGroupCard(
+                group = group,
+                now = now,
+                onDepartureClick = onDepartureClick,
+                showStopName = showStopName,
+                disruptedRouteIds = disruptedRouteIds
+            )
         }
     }
 }
@@ -104,7 +116,8 @@ fun RouteGroupCard(
     group: RouteGroup,
     now: Long,
     onDepartureClick: ((Departure) -> Unit)?,
-    showStopName: Boolean = true
+    showStopName: Boolean = true,
+    disruptedRouteIds: Set<String> = emptySet()
 ) {
     Surface(
         shape = RoundedCornerShape(20.dp),
@@ -112,12 +125,12 @@ fun RouteGroupCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         if (group.directions.size == 1) {
-            DirectionCardContent(group.directions.first(), now, onDepartureClick, showStopName)
+            DirectionCardContent(group.directions.first(), now, onDepartureClick, showStopName, disruptedRouteIds)
         } else {
             val pagerState = rememberPagerState { group.directions.size }
             Column {
                 HorizontalPager(state = pagerState) { page ->
-                    DirectionCardContent(group.directions[page], now, onDepartureClick, showStopName)
+                    DirectionCardContent(group.directions[page], now, onDepartureClick, showStopName, disruptedRouteIds)
                 }
                 // Page dots + the other direction's destination as a swipe hint
                 val other = group.directions[(pagerState.currentPage + 1) % group.directions.size]
@@ -156,9 +169,11 @@ private fun DirectionCardContent(
     card: DirectionCard,
     now: Long,
     onDepartureClick: ((Departure) -> Unit)?,
-    showStopName: Boolean
+    showStopName: Boolean,
+    disruptedRouteIds: Set<String>
 ) {
     val next = card.departures.first()
+    val disrupted = card.departures.any { it.routeId in disruptedRouteIds }
     val routeColor = parseHex(card.routeColor) ?: MaterialTheme.colorScheme.primary
     val routeTextColor = parseHex(card.routeTextColor)
         ?: if (routeColor.luminance() > 0.5f) Color.Black else Color.White
@@ -177,12 +192,22 @@ private fun DirectionCardContent(
         Spacer(Modifier.width(12.dp))
 
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                displayHeadsign(card),
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(verticalAlignment = Alignment.Top) {
+                if (disrupted) {
+                    Icon(
+                        Icons.Default.Warning,
+                        contentDescription = "Service disruption",
+                        tint = Color(0xFFFFA726),
+                        modifier = Modifier.padding(top = 3.dp, end = 4.dp).size(16.dp)
+                    )
+                }
+                Text(
+                    displayHeadsign(card),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
             if (walkSecs != null || place != null) {
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {

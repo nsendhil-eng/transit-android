@@ -12,6 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import space.snapp.waygo.data.api.models.Departure
+import space.snapp.waygo.ui.alerts.AlertBannerArea
+import space.snapp.waygo.ui.alerts.rememberServiceAlerts
 import space.snapp.waygo.ui.routecards.ModeFilterRow
 import space.snapp.waygo.ui.routecards.RouteCardList
 import space.snapp.waygo.ui.routecards.availableModes
@@ -61,6 +63,11 @@ fun NearMeScreen(
     val groups = remember(departures, stops, modeFilter, now) {
         buildRouteGroups(departures, stops, modeFilter, now)
     }
+    // Alerts for the routes on screen and the nearest stops (closed stations included)
+    val alerts = rememberServiceAlerts(
+        routeIds = departures.map { it.routeId },
+        stopIds = stops.sortedBy { it.distanceMeters ?: Double.MAX_VALUE }.take(20).map { it.id }
+    )
 
     when {
         isLoading && departures.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -84,7 +91,11 @@ fun NearMeScreen(
             if (modes.size > 1) {
                 ModeFilterRow(modes = modes, selected = modeFilter, onSelect = viewModel::setModeFilter)
             }
-            RouteCardList(groups, now, onDepartureClick, Modifier.fillMaxSize())
+            RouteCardList(
+                groups, now, onDepartureClick, Modifier.fillMaxSize(),
+                disruptedRouteIds = alerts.disruptedRouteIds,
+                header = { AlertBannerArea(alerts) }
+            )
         }
     }
 }

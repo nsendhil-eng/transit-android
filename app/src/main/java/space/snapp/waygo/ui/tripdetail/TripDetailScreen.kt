@@ -66,6 +66,9 @@ import space.snapp.waygo.data.api.models.NextTrip
 import space.snapp.waygo.data.api.models.TripDetailResponse
 import space.snapp.waygo.data.api.models.TripStop
 import space.snapp.waygo.data.api.models.TripVehicle
+import space.snapp.waygo.ui.alerts.AlertBannerArea
+import space.snapp.waygo.ui.alerts.AlertsUi
+import space.snapp.waygo.ui.alerts.rememberServiceAlerts
 import space.snapp.waygo.ui.components.LiveIndicator
 import space.snapp.waygo.ui.components.delayLabel
 import space.snapp.waygo.ui.map.ESRI_DARK_GRAY_BASE
@@ -133,6 +136,8 @@ fun TripDetailScreen(
     val routeTextColor = parseHexColor(info?.routeTextColor)
         ?: if (routeColor.luminance() > 0.5f) Color.Black else Color.White
     val routeShortName = info?.routeShortName ?: args.routeShortName
+    // Alerts for this route (e.g. track work, diversions)
+    val alerts = rememberServiceAlerts(listOfNotNull(info?.routeId ?: args.routeId.takeIf { it.isNotBlank() }), emptyList())
     val headsign = info?.headsign ?: args.headsign
 
     // Only auto-fit the map when the trip changes, so 10 s refreshes don't fight the user's panning
@@ -201,7 +206,8 @@ fun TripDetailScreen(
                                 userLat = userLat,
                                 userLon = userLon,
                                 now = now,
-                                onSelectTrip = viewModel::switchTrip
+                                onSelectTrip = viewModel::switchTrip,
+                                alerts = alerts
                             )
                         }
                     }
@@ -368,7 +374,8 @@ private fun TripSheetContent(
     userLat: Double?,
     userLon: Double?,
     now: Long,
-    onSelectTrip: (String) -> Unit
+    onSelectTrip: (String) -> Unit,
+    alerts: AlertsUi
 ) {
     var showEarlier by remember(detail.tripInfo.tripId) { mutableStateOf(false) }
     val stops = detail.stops
@@ -396,6 +403,11 @@ private fun TripSheetContent(
         }
         item(key = "status") {
             LiveStatusLine(stops = stops, nearest = nearest, vehicle = vehicle, routeColor = routeColor)
+        }
+        if (alerts.visible.isNotEmpty()) {
+            item(key = "alerts") {
+                AlertBannerArea(alerts, Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+            }
         }
         items(items, key = { item ->
             when (item) {
