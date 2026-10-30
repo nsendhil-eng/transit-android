@@ -91,6 +91,8 @@ fun NearbyStopsMapView(
         val map = mapRef.value ?: return@LaunchedEffect
         val dp = context.resources.displayMetrics.density
         map.overlays.clear()
+        // clear() also drops the street-name labels overlay, so put it back
+        map.addDarkCanvasLabels(context)
 
         // Draw route shapes + vehicle markers for the selected stop's upcoming trips
         for (trip in tripLiveData) {

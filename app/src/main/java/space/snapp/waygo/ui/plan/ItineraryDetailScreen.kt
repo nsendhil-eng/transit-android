@@ -377,6 +377,8 @@ private fun formatTime(epochMs: Long): String {
 
 private fun buildItineraryMap(map: MapView, itinerary: Itinerary, dp: Float) {
     map.overlays.clear()
+    // clear() also drops the street-name labels overlay, so put it back
+    map.addDarkCanvasLabels(map.context)
     val allPoints = mutableListOf<GeoPoint>()
 
     for (leg in itinerary.legs) {
