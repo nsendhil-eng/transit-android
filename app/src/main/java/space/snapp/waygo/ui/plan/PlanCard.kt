@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -30,7 +31,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.Canvas
+import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 import space.snapp.waygo.data.api.models.AddressResult
 import space.snapp.waygo.data.api.models.Itinerary
 import space.snapp.waygo.data.api.models.ItineraryLeg
@@ -74,10 +83,13 @@ fun PlanCard(
         viewModel.userLon = userLon
     }
 
-    // Auto-shift focus to To field when From is confirmed
+    // Auto-shift focus to To field when From is confirmed; drop the keyboard once both are set
+    // so it doesn't cover the results
+    val focusManager = LocalFocusManager.current
     LaunchedEffect(activeField) {
         when (activeField) {
             ActiveField.TO -> toFocusRequester.requestFocus()
+            ActiveField.NONE -> focusManager.clearFocus()
             else -> {}
         }
     }
@@ -308,6 +320,18 @@ fun PlanCard(
                         itineraries.sortedBy { it.duration }
                     else
                         itineraries.sortedBy { it.walkDistance }
+                    // One time axis for every card so bars are directly comparable
+                    val window = remember(itineraries) {
+                        TimeWindow(itineraries.minOf { it.startTime }, itineraries.maxOf { it.endTime })
+                    }
+                    // Ticks the "Go in N min" labels forward while results are on screen
+                    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+                    LaunchedEffect(Unit) {
+                        while (true) {
+                            delay(30_000)
+                            now = System.currentTimeMillis()
+                        }
+                    }
 
                     val pullState = rememberPullToRefreshState()
 
@@ -357,9 +381,13 @@ fun PlanCard(
                                     )
                                 }
                             }
+                            // Padding matches ItineraryCard's inner padding so ticks line up with bars
+                            TimelineAxis(window, modifier = Modifier.padding(horizontal = 16.dp))
                             sorted.forEach { itinerary ->
                                 ItineraryCard(
                                     itinerary = itinerary,
+                                    window = window,
+                                    now = now,
                                     onTap = { onItinerarySelect(itinerary) }
                                 )
                             }
@@ -372,84 +400,181 @@ fun PlanCard(
 }
 
 @Composable
-private fun ItineraryCard(itinerary: Itinerary, onTap: () -> Unit) {
+private fun ItineraryCard(itinerary: Itinerary, window: TimeWindow, now: Long, onTap: () -> Unit) {
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surface,
         shadowElevation = 6.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
-            modifier = Modifier.clickable(onClick = onTap).padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier.clickable(onClick = onTap).padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                // Departure window
+            // "Go in 5 min" + departure window, duration on the right
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "${planFormatTime(itinerary.startTime)} → ${planFormatTime(itinerary.endTime)}",
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    leaveLabel(itinerary.startTime, now),
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.primary
                 )
-                Spacer(Modifier.height(6.dp))
-                // Mode chips
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    itinerary.legs.forEach { leg ->
-                        if (leg.isTransit) {
-                            val bgColor = leg.routeColor?.let {
-                                runCatching { Color(android.graphics.Color.parseColor("#$it")) }.getOrNull()
-                            } ?: MaterialTheme.colorScheme.primary
-                            Surface(color = bgColor, shape = RoundedCornerShape(6.dp)) {
-                                Text(
-                                    leg.routeShortName ?: leg.mode,
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = Color.White,
-                                    maxLines = 1,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        } else if (leg.mode == "WALK") {
-                            Icon(Icons.Default.DirectionsWalk, contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        if (itinerary.legs.last() != leg) {
-                            Icon(Icons.Default.ChevronRight, contentDescription = null,
-                                modifier = Modifier.size(14.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-                Spacer(Modifier.height(4.dp))
-                // Subtitle: walk distance + transfers
-                val walkKm = itinerary.walkDistance / 1000f
-                val walkText = if (walkKm < 1f) "${itinerary.walkDistance}m walk" else "${"%.1f".format(walkKm)}km walk"
-                val transferText = when (itinerary.transfers) {
-                    0 -> "No transfers"
-                    1 -> "1 transfer"
-                    else -> "${itinerary.transfers} transfers"
-                }
+                Spacer(Modifier.width(8.dp))
                 Text(
-                    "$walkText · $transferText",
+                    "${planFormatTime(itinerary.startTime)} → ${planFormatTime(itinerary.endTime)}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
                 )
-            }
-
-            Spacer(Modifier.width(12.dp))
-            Column(horizontalAlignment = Alignment.End) {
                 Text(
                     "${itinerary.durationMins} min",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Icon(Icons.Default.ChevronRight, contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp))
+            }
+            Spacer(Modifier.height(8.dp))
+            ItineraryTimelineBar(itinerary, window)
+            Spacer(Modifier.height(6.dp))
+            // Subtitle: walk distance + transfers
+            val walkKm = itinerary.walkDistance / 1000f
+            val walkText = if (walkKm < 1f) "${itinerary.walkDistance}m walk" else "${"%.1f".format(walkKm)}km walk"
+            val transferText = when (itinerary.transfers) {
+                0 -> "No transfers"
+                1 -> "1 transfer"
+                else -> "${itinerary.transfers} transfers"
+            }
+            Text(
+                "$walkText · $transferText",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/** Shared time range across all itineraries, used to position legs on a common axis. */
+private data class TimeWindow(val start: Long, val end: Long) {
+    private val span: Long get() = (end - start).coerceAtLeast(1)
+
+    fun fraction(t: Long): Float = ((t - start).toFloat() / span).coerceIn(0f, 1f)
+
+    /** Round clock times inside the window, spaced so the axis shows roughly 3–5 labels. */
+    fun ticks(): List<Long> {
+        val stepMin = when {
+            span <= 40 * 60_000L -> 10
+            span <= 90 * 60_000L -> 15
+            span <= 180 * 60_000L -> 30
+            else -> 60
+        }
+        val stepMs = stepMin * 60_000L
+        val first = (start + stepMs - 1) / stepMs * stepMs
+        return generateSequence(first) { it + stepMs }.takeWhile { it <= end }.toList()
+    }
+}
+
+@Composable
+private fun TimelineAxis(window: TimeWindow, modifier: Modifier = Modifier) {
+    val ticks = remember(window) { window.ticks() }
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    Layout(
+        content = {
+            ticks.forEach {
+                Text(planFormatTime(it), style = MaterialTheme.typography.labelSmall, color = labelColor)
+            }
+        },
+        modifier = modifier.fillMaxWidth()
+    ) { measurables, constraints ->
+        val width = constraints.maxWidth
+        val placeables = measurables.map { it.measure(Constraints()) }
+        val height = placeables.maxOfOrNull { it.height } ?: 0
+        layout(width, height) {
+            placeables.forEachIndexed { i, p ->
+                // Centre each label on its tick, clamped so edge labels stay on screen
+                val centre = (window.fraction(ticks[i]) * width).roundToInt()
+                p.place((centre - p.width / 2).coerceIn(0, (width - p.width).coerceAtLeast(0)), 0)
             }
         }
+    }
+}
+
+/** Walk legs as dots, transit legs as route-coloured pills, sized by duration on the shared axis. */
+@Composable
+private fun ItineraryTimelineBar(itinerary: Itinerary, window: TimeWindow) {
+    val walkColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val fallbackColor = MaterialTheme.colorScheme.primary
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth().height(24.dp)) {
+        val tripStart = maxWidth * window.fraction(itinerary.startTime)
+        val tripEnd = maxWidth * window.fraction(itinerary.endTime)
+        // Faint baseline under the whole trip so waits between legs read as gaps
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .offset(x = tripStart)
+                .width(tripEnd - tripStart)
+                .height(2.dp)
+                .background(walkColor.copy(alpha = 0.2f))
+        )
+        itinerary.legs.forEach { leg ->
+            val x = maxWidth * window.fraction(leg.startTime)
+            val legWidth = maxWidth * window.fraction(leg.endTime) - x
+            if (leg.isTransit) {
+                val bg = leg.parsedRouteColor() ?: fallbackColor
+                Surface(
+                    color = bg,
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .offset(x = x)
+                        .width(legWidth.coerceAtLeast(8.dp))
+                        .fillMaxHeight()
+                ) {
+                    // Only label pills wide enough to hold a route number
+                    if (legWidth >= 28.dp) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                leg.routeShortName ?: leg.mode,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = if (bg.luminance() > 0.6f) Color.Black else Color.White,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Clip
+                            )
+                        }
+                    }
+                }
+            } else {
+                WalkDots(
+                    color = walkColor.copy(alpha = 0.6f),
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .offset(x = x)
+                        .width(legWidth)
+                        .height(6.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WalkDots(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val r = size.height / 2
+        var cx = r
+        while (cx <= size.width - r) {
+            drawCircle(color, radius = r, center = Offset(cx, center.y))
+            cx += r * 3
+        }
+    }
+}
+
+private fun ItineraryLeg.parsedRouteColor(): Color? =
+    routeColor?.let { runCatching { Color(android.graphics.Color.parseColor("#$it")) }.getOrNull() }
+
+private fun leaveLabel(startTime: Long, now: Long): String {
+    val mins = ((startTime - now) / 60_000).toInt()
+    return when {
+        mins <= 0 -> "Go now"
+        mins < 60 -> "Go in $mins min"
+        else -> "Leave ${planFormatTime(startTime)}"
     }
 }
 
