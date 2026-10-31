@@ -81,6 +81,12 @@ interface TransitApiService {
         @Query("stop_ids") stopIds: String? = null
     ): AlertsResponse
 
+    @GET("/api/alerts/all")
+    suspend fun allAlerts(
+        @Query("lat") lat: Double? = null,
+        @Query("lon") lon: Double? = null
+    ): AlertsResponse
+
     @GET("/api/plan-delays")
     suspend fun planDelays(
         @Query("trip_ids") tripIds: String

@@ -163,7 +163,7 @@ private fun AlertHeaderRow(alert: ServiceAlert) {
 }
 
 @Composable
-private fun AlertDetails(alert: ServiceAlert, onDismiss: () -> Unit) {
+internal fun AlertDetails(alert: ServiceAlert, onDismiss: (() -> Unit)?) {
     val uriHandler = LocalUriHandler.current
     Column(
         modifier = Modifier.padding(start = 42.dp, end = 12.dp, top = 4.dp, bottom = 10.dp),
@@ -180,10 +180,12 @@ private fun AlertDetails(alert: ServiceAlert, onDismiss: () -> Unit) {
                     Text("More on translink.com.au")
                 }
             }
-            TextButton(onClick = onDismiss, contentPadding = PaddingValues(horizontal = 8.dp)) {
-                Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Dismiss")
+            if (onDismiss != null) {
+                TextButton(onClick = onDismiss, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                    Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Dismiss")
+                }
             }
         }
     }
@@ -191,7 +193,7 @@ private fun AlertDetails(alert: ServiceAlert, onDismiss: () -> Unit) {
 
 // ── Presentation helpers ───────────────────────────────────────────────────
 
-private fun kindColor(kind: String): Color = when (kind) {
+internal fun kindColor(kind: String): Color = when (kind) {
     "disruption" -> Color(0xFFFFA726)
     "change" -> Color(0xFFFFCA28)
     "stopMoved", "accessibility" -> Color(0xFF64B5F6)
@@ -199,7 +201,7 @@ private fun kindColor(kind: String): Color = when (kind) {
     else -> Color(0xFFB0BEC5)
 }
 
-private fun kindIcon(kind: String): ImageVector = when (kind) {
+internal fun kindIcon(kind: String): ImageVector = when (kind) {
     "disruption" -> Icons.Default.Warning
     "change" -> Icons.Default.Schedule
     "stopMoved" -> Icons.Default.WrongLocation

@@ -39,6 +39,7 @@ import space.snapp.waygo.ui.search.SearchViewModel
 import space.snapp.waygo.ui.favorites.FavoritesScreen
 import space.snapp.waygo.ui.theme.WayGoTheme
 import space.snapp.waygo.ui.plan.PlanViewModel
+import space.snapp.waygo.ui.alerts.NetworkAlertsViewModel
 import space.snapp.waygo.ui.tripdetail.TripDetailArgs
 import space.snapp.waygo.ui.tripdetail.TripDetailScreen
 import space.snapp.waygo.ui.tripdetail.TripDetailViewModel
@@ -110,6 +111,8 @@ fun WayGoApp() {
     val favoritesVM: FavoritesViewModel = viewModel(factory = FavoritesViewModel.Factory(context))
     val nearMeVM: NearMeViewModel = viewModel()
     val planVM: PlanViewModel = viewModel()
+    // App-session scoped so the home alert banner stays collapsed across tab switches
+    val networkAlertsVM: NetworkAlertsViewModel = viewModel()
 
     // Trip detail navigation
     var tripDetailArgs by remember { mutableStateOf<TripDetailArgs?>(null) }
@@ -180,6 +183,7 @@ fun WayGoApp() {
                     planViewModel = planVM,
                     userLat = userLat,
                     userLon = userLon,
+                    networkAlertsVM = networkAlertsVM,
                     onTripSelected = { tripDetailArgs = it }
                 )
                 Screen.Favourites -> FavoritesScreen(

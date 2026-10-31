@@ -208,6 +208,17 @@ private fun DirectionCardContent(
                     overflow = TextOverflow.Ellipsis
                 )
             }
+            if (card.isReplacement) {
+                Spacer(Modifier.height(4.dp))
+                Surface(color = Color(0xFFFFA726).copy(alpha = 0.18f), shape = RoundedCornerShape(6.dp)) {
+                    Text(
+                        "Replacement bus",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFFFFA726),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
             if (walkSecs != null || place != null) {
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {

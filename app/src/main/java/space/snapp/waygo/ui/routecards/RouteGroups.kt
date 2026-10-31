@@ -17,9 +17,13 @@ data class DirectionCard(
     val stopName: String,
     val platformCode: String?,
     val distanceMeters: Double?,
+    /** e.g. "Rail Replacement Bus" — temporary services that stand in for a closed line */
+    val routeLongName: String?,
     /** Next departures from that stop, soonest first (max 3). */
     val departures: List<Departure>
 ) {
+    val isReplacement: Boolean get() = routeLongName?.contains("replacement", ignoreCase = true) == true
+
     val walkSeconds: Int? get() = distanceMeters?.let { (it / WALK_METRES_PER_MIN * 60).toInt() }
 
     /** Seconds until the first departure you could still reach on foot — used for ordering. */
@@ -82,6 +86,7 @@ fun buildRouteGroups(
                 // Platform of the next service — later ones may leave from a different platform
                 platformCode = first.platformCode?.takeIf { it.isNotBlank() },
                 distanceMeters = placeDistance[nearestPlace],
+                routeLongName = first.routeLongName,
                 departures = atPlace
             )
         }

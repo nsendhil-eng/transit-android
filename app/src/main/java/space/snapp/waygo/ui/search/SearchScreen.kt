@@ -17,6 +17,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.animation.AnimatedVisibility
+import space.snapp.waygo.ui.alerts.AlertsPage
+import space.snapp.waygo.ui.alerts.HomeAlertControl
+import space.snapp.waygo.ui.alerts.NetworkAlertsViewModel
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -46,6 +49,7 @@ fun SearchScreen(
     planViewModel: PlanViewModel,
     userLat: Double?,
     userLon: Double?,
+    networkAlertsVM: NetworkAlertsViewModel,
     onTripSelected: (TripDetailArgs) -> Unit = {}
 ) {
     val query by viewModel.query.collectAsState()
@@ -62,6 +66,10 @@ fun SearchScreen(
     var stopsForSaving by remember { mutableStateOf<List<Stop>>(emptyList()) }
     var inPlanMode by remember { mutableStateOf(false) }
     var selectedItinerary by remember { mutableStateOf<Itinerary?>(null) }
+    var showAllAlerts by remember { mutableStateOf(false) }
+    val networkAlerts by networkAlertsVM.alerts.collectAsState()
+    val alertBannerCollapsed by networkAlertsVM.bannerCollapsed.collectAsState()
+    LaunchedEffect(userLat, userLon) { networkAlertsVM.onLocation(userLat, userLon) }
 
     // White — high contrast against dark map
     val searchBarBg = Color.White
@@ -366,6 +374,29 @@ fun SearchScreen(
 
                 else -> { /* map is the content — nothing needed */ }
             }
+        }
+
+        // Alert control floats over the map, under the search bar, while the map is the content
+        if (!inPlanMode && query.isEmpty() && selectedStops.isEmpty()) {
+            HomeAlertControl(
+                alerts = networkAlerts,
+                collapsed = alertBannerCollapsed,
+                onCollapse = networkAlertsVM::collapseBanner,
+                onOpenAll = { networkAlertsVM.collapseBanner(); showAllAlerts = true },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(start = 12.dp, end = 12.dp, top = 84.dp)
+            )
+        }
+
+        // All alerts — full-screen overlay
+        AnimatedVisibility(
+            visible = showAllAlerts,
+            enter = slideInVertically(initialOffsetY = { it / 6 }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it / 6 }) + fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            AlertsPage(alerts = networkAlerts, onBack = { showAllAlerts = false })
         }
 
         // Itinerary detail — full-screen overlay inside the same Box so it covers the map

@@ -19,7 +19,12 @@ data class ServiceAlert(
     val activeFrom: String?,
     val activeUntil: String?,
     val matchedRouteIds: List<String> = emptyList(),
-    val matchedStopIds: List<String> = emptyList()
+    val matchedStopIds: List<String> = emptyList(),
+    // From /api/alerts/all: distance to the nearest affected stop, and a few route codes
+    val distanceM: Int? = null,
+    val nearestStopName: String? = null,
+    val routeCodes: List<String> = emptyList(),
+    val routeCount: Int? = null
 ) {
     val isUpcoming: Boolean get() = status == "upcoming"
     val fromDate: Date? get() = parseIsoUtc(activeFrom)

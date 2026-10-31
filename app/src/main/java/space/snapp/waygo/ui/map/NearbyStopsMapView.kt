@@ -304,7 +304,12 @@ private fun StopGroupSheet(
                 Text(group.name, style = MaterialTheme.typography.titleMedium)
                 val subtitle = buildString {
                     group.distanceLabel?.let { append(it) }
-                    if (group.isMultiPlatform) { if (isNotEmpty()) append(" · "); append("${group.stops.size} platforms") }
+                    if (group.isMultiPlatform) {
+                        if (isNotEmpty()) append(" · ")
+                        // Stations can mix train platforms with bus bays (e.g. replacement buses)
+                        val allSameMode = group.stops.map { it.primaryVehicleType }.distinct().size == 1
+                        append("${group.stops.size} ${if (allSameMode) "platforms" else "stops"}")
+                    }
                 }
                 if (subtitle.isNotEmpty()) {
                     Text(subtitle, style = MaterialTheme.typography.bodySmall,
