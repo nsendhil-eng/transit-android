@@ -34,6 +34,8 @@ import space.snapp.waygo.ui.departures.DeparturesScreen
 import space.snapp.waygo.ui.departures.DeparturesViewModel
 import space.snapp.waygo.ui.favorites.AddFavouriteSheet
 import space.snapp.waygo.ui.favorites.FavoritesViewModel
+import space.snapp.waygo.ui.favorites.SaveStopsPrompt
+import androidx.compose.runtime.saveable.rememberSaveable
 import space.snapp.waygo.ui.map.NearbyStopsMapView
 import space.snapp.waygo.ui.plan.ItineraryDetailScreen
 import space.snapp.waygo.ui.plan.PlanCard
@@ -64,6 +66,10 @@ fun SearchScreen(
 
     var showSaveSheet by remember { mutableStateOf(false) }
     var stopsForSaving by remember { mutableStateOf<List<Stop>>(emptyList()) }
+    var saveName by remember { mutableStateOf<String?>(null) }
+    val favorites by favoritesVM.favorites.collectAsState()
+    // The save prompt opens as a card until closed or something is saved, then stays as a pill
+    var savePromptClosed by rememberSaveable { mutableStateOf(false) }
     var inPlanMode by remember { mutableStateOf(false) }
     var selectedItinerary by remember { mutableStateOf<Itinerary?>(null) }
     var showAllAlerts by remember { mutableStateOf(false) }
@@ -217,6 +223,7 @@ fun SearchScreen(
                         AssistChip(
                             onClick = {
                                 stopsForSaving = viewModel.expandedStops(selectedStops, results.stops)
+                                saveName = null
                                 showSaveSheet = true
                             },
                             label = { Text("Save") },
@@ -387,6 +394,18 @@ fun SearchScreen(
                     .align(Alignment.TopEnd)
                     .padding(start = 12.dp, end = 12.dp, top = 84.dp)
             )
+            SaveStopsPrompt(
+                expanded = favorites.isEmpty() && !savePromptClosed,
+                onAdd = { name ->
+                    stopsForSaving = emptyList()
+                    saveName = name
+                    showSaveSheet = true
+                },
+                onCollapse = { savePromptClosed = true },
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(12.dp)
+            )
         }
 
         // All alerts — full-screen overlay
@@ -423,6 +442,7 @@ fun SearchScreen(
             favoritesVM = favoritesVM,
             userLat = userLat,
             userLon = userLon,
+            initialName = saveName,
             onDismiss = { showSaveSheet = false },
             onSave = { fav ->
                 favoritesVM.saveFavorite(fav)

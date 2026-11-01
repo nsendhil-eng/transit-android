@@ -28,12 +28,14 @@ fun AddFavouriteSheet(
     savedPlaces: List<FavoritePlace> = emptyList(),
     userLat: Double? = null,
     userLon: Double? = null,
+    // Pre-filled name, e.g. "Home" from the home-screen prompt
+    initialName: String? = null,
     onDismiss: () -> Unit,
     onSave: (FavoriteStop) -> Unit
 ) {
     val scope = rememberCoroutineScope()
 
-    var name by remember { mutableStateOf(existing?.name ?: stops.firstOrNull()?.name ?: "") }
+    var name by remember { mutableStateOf(existing?.name ?: initialName ?: stops.firstOrNull()?.name ?: "") }
     var editableStops by remember { mutableStateOf(stops.toMutableList() as List<Stop>) }
     var addStopQuery by remember { mutableStateOf("") }
     var addStopResults by remember { mutableStateOf<List<Stop>>(emptyList()) }
