@@ -37,6 +37,11 @@ import space.snapp.waygo.ui.favorites.FavoritesViewModel
 import space.snapp.waygo.ui.favorites.SaveStopsPrompt
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import kotlinx.coroutines.delay
 import androidx.compose.ui.platform.LocalDensity
 import space.snapp.waygo.ui.map.NearbyStopsMapView
 import space.snapp.waygo.ui.plan.ItineraryDetailScreen
@@ -77,6 +82,27 @@ fun SearchScreen(
     var savePromptHeightPx by remember { mutableIntStateOf(0) }
     // The map's mode cards along the bottom; the save prompt sits above them
     var mapCardsHeightPx by remember { mutableIntStateOf(0) }
+
+    // Search is a round button until tapped; the bar stays while there's a query or chosen stops
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    val searchBarShown = searchOpen || query.isNotEmpty() || selectedStops.isNotEmpty()
+    val searchFocus = remember { FocusRequester() }
+    LaunchedEffect(searchOpen) { if (searchOpen && query.isEmpty()) runCatching { searchFocus.requestFocus() } }
+    // Left alone for a minute (no typing, nothing chosen): fold back into the button
+    LaunchedEffect(searchOpen, query, selectedStops.isEmpty()) {
+        if (searchOpen && selectedStops.isEmpty()) {
+            delay(SEARCH_IDLE_MS)
+            viewModel.onQueryChange("")
+            searchOpen = false
+        }
+    }
+    // Done with the chosen stops: fold back too
+    var hadStops by remember { mutableStateOf(false) }
+    LaunchedEffect(selectedStops.isEmpty()) {
+        if (selectedStops.isEmpty() && hadStops) searchOpen = false
+        hadStops = selectedStops.isNotEmpty()
+    }
+
     val density = LocalDensity.current
     var inPlanMode by remember { mutableStateOf(false) }
     var selectedItinerary by remember { mutableStateOf<Itinerary?>(null) }
@@ -84,6 +110,13 @@ fun SearchScreen(
     val networkAlerts by networkAlertsVM.alerts.collectAsState()
     val alertBannerCollapsed by networkAlertsVM.bannerCollapsed.collectAsState()
     LaunchedEffect(userLat, userLon) { networkAlertsVM.onLocation(userLat, userLon) }
+    // The alert banner shows briefly, then shrinks to the ⚠ button beside search
+    LaunchedEffect(networkAlerts.isNotEmpty(), alertBannerCollapsed) {
+        if (networkAlerts.isNotEmpty() && !alertBannerCollapsed) {
+            delay(ALERT_BANNER_MS)
+            networkAlertsVM.collapseBanner()
+        }
+    }
 
     // White — high contrast against dark map
     val searchBarBg = Color.White
@@ -122,10 +155,15 @@ fun SearchScreen(
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
 
-            // Back clears the search, then the selected stops, before leaving the app
-            // (same precedence as the content panel below: results win over selected stops)
-            BackHandler(enabled = !inPlanMode && (query.isNotEmpty() || selectedStops.isNotEmpty())) {
-                if (query.isNotEmpty()) viewModel.onQueryChange("") else viewModel.clearAll()
+            // Back clears the search, then the selected stops, then folds the bar back into
+            // the round button, before leaving the app (same precedence as the content panel
+            // below: results win over selected stops)
+            BackHandler(enabled = !inPlanMode && searchBarShown) {
+                when {
+                    query.isNotEmpty() -> viewModel.onQueryChange("")
+                    selectedStops.isNotEmpty() -> viewModel.clearAll()
+                    else -> searchOpen = false
+                }
             }
 
             // Floating search bar OR plan mode card
@@ -142,7 +180,7 @@ fun SearchScreen(
                     onClose = { inPlanMode = false; planViewModel.reset() },
                     onItinerarySelect = { selectedItinerary = it }
                 )
-            } else {
+            } else if (searchBarShown) {
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = searchBarBg,
@@ -156,7 +194,13 @@ fun SearchScreen(
                             Text("Stop name, route, suburb...", color = searchBarHint)
                         },
                         leadingIcon = {
-                            Icon(Icons.Default.Search, contentDescription = null, tint = searchBarIcon)
+                            // Folds the bar back into the round button
+                            IconButton(onClick = {
+                                viewModel.onQueryChange("")
+                                if (selectedStops.isEmpty()) searchOpen = false
+                            }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close search", tint = searchBarIcon)
+                            }
                         },
                         trailingIcon = {
                             if (query.isNotEmpty()) {
@@ -174,6 +218,7 @@ fun SearchScreen(
                             }
                         },
                         singleLine = true,
+                        modifier = Modifier.fillMaxWidth().focusRequester(searchFocus),
                         colors = OutlinedTextFieldDefaults.colors(
                             unfocusedBorderColor = Color.Transparent,
                             focusedBorderColor = Color.Transparent,
@@ -182,7 +227,6 @@ fun SearchScreen(
                             unfocusedTextColor = searchBarText,
                             focusedTextColor = searchBarText,
                         ),
-                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }
@@ -344,6 +388,9 @@ fun SearchScreen(
                                                 }
                                             },
                                             modifier = Modifier.clickable {
+                                                // A route was chosen: the search is done
+                                                viewModel.onQueryChange("")
+                                                searchOpen = false
                                                 onTripSelected(
                                                     TripDetailArgs(
                                                         tripId = null,
@@ -395,17 +442,36 @@ fun SearchScreen(
             }
         }
 
-        // Alert control floats over the map, under the search bar, while the map is the content
-        if (!inPlanMode && query.isEmpty() && selectedStops.isEmpty()) {
-            HomeAlertControl(
-                alerts = networkAlerts,
-                collapsed = alertBannerCollapsed,
-                onCollapse = networkAlertsVM::collapseBanner,
-                onOpenAll = { networkAlertsVM.collapseBanner(); showAllAlerts = true },
+        // While the map is the content: the round search button, with the alert beside it
+        // (a banner for a few seconds, then the ⚠ button)
+        if (!inPlanMode && !searchBarShown) {
+            Row(
+                verticalAlignment = Alignment.Top,
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(start = 12.dp, end = 12.dp, top = 84.dp)
-            )
+                    .align(Alignment.TopStart)
+                    .fillMaxWidth()
+                    .padding(start = 12.dp, end = 6.dp, top = 8.dp)
+            ) {
+                Surface(
+                    onClick = { searchOpen = true },
+                    shape = CircleShape,
+                    color = Color(0xFF22272E),
+                    shadowElevation = 10.dp,
+                    modifier = Modifier.padding(top = 6.dp).size(48.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Search, contentDescription = "Search stops and routes", tint = Color.White)
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
+                HomeAlertControl(
+                    alerts = networkAlerts,
+                    collapsed = alertBannerCollapsed,
+                    onCollapse = networkAlertsVM::collapseBanner,
+                    onOpenAll = { networkAlertsVM.collapseBanner(); showAllAlerts = true },
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+            }
             SaveStopsPrompt(
                 expanded = savePromptExpanded,
                 onAdd = { name ->
@@ -464,6 +530,11 @@ fun SearchScreen(
         )
     }
 }
+
+/** Search bar folds back into its button after this long untouched */
+private const val SEARCH_IDLE_MS = 60_000L
+/** The alert banner shrinks to its ⚠ button after this long */
+private const val ALERT_BANNER_MS = 6_000L
 
 private fun parseColor(hex: String): androidx.compose.ui.graphics.Color =
     runCatching {
