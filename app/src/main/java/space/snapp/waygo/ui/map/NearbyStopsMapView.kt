@@ -138,8 +138,10 @@ fun NearbyStopsMapView(
                         label = if (trip.routeType == 1 || trip.routeType == 2) "" else trip.routeShortName,
                         routeColor = routeColorInt,
                         routeTextColor = textColor,
-                        heading = v.heading
+                        heading = if (v.isLive) v.heading else null
                     )
+                    // Faded, arrowless: last known position of a bus that isn't reporting now
+                    if (!v.isLive) alpha = 0.45f
                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                     setInfoWindow(null)
                 }

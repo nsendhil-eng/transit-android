@@ -2,6 +2,9 @@ package space.snapp.waygo.data.api.models
 
 import java.util.Date
 
+/** Matches the API's stale threshold, for responses that predate isStale. */
+const val STALE_AFTER_S = 180
+
 data class TripStop(
     val stopId: String,
     val stopName: String,
@@ -48,9 +51,14 @@ data class TripVehicle(
     // GTFS-RT VehicleStopStatus: 0 INCOMING_AT, 1 STOPPED_AT, 2 IN_TRANSIT_TO
     val currentStatus: Int? = null,
     // False when the API couldn't work out a direction (vehicle off its route line)
-    val headingKnown: Boolean? = null
+    val headingKnown: Boolean? = null,
+    // GPS fix older than ~3 min: not where the bus is now (e.g. parked before the trip starts)
+    val isStale: Boolean? = null
 ) {
     val isStoppedAt: Boolean get() = currentStatus == 1
+
+    /** Fresh enough to place on the timeline and count stops from. */
+    val isLive: Boolean get() = isStale != true && (ageSeconds ?: 0) <= STALE_AFTER_S
 
     /** Direction of travel, or null if unknown — older API responses never had one. */
     val heading: Float? get() = bearing.takeIf { headingKnown == true }

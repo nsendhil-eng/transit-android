@@ -30,6 +30,8 @@ import androidx.compose.material.icons.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Train
 import androidx.compose.material.icons.filled.Tram
@@ -380,7 +382,9 @@ private fun TripSheetContent(
     var showEarlier by remember(detail.tripInfo.tripId) { mutableStateOf(false) }
     val stops = detail.stops
     val nearest = stops.firstOrNull { it.isNearest }
-    val vehicle = detail.vehicle
+    // Only a fresh fix places the bus on the timeline; a stale one is mentioned, not trusted
+    val vehicle = detail.vehicle?.takeIf { it.isLive }
+    val staleVehicle = detail.vehicle?.takeUnless { it.isLive }
 
     val items = remember(detail, showEarlier) { buildTimeline(stops, vehicle, showEarlier) }
 
@@ -402,7 +406,7 @@ private fun TripSheetContent(
             }
         }
         item(key = "status") {
-            LiveStatusLine(stops = stops, nearest = nearest, vehicle = vehicle, routeColor = routeColor)
+            LiveStatusLine(stops = stops, nearest = nearest, vehicle = vehicle, staleVehicle = staleVehicle, routeColor = routeColor, now = now)
         }
         if (alerts.visible.isNotEmpty()) {
             item(key = "alerts") {
@@ -560,36 +564,54 @@ private fun DepartureTilePlaceholders() {
     }
 }
 
-/** One-line summary: how far the vehicle is from your stop and how fresh the data is. */
+/** One-line summary: where the vehicle is relative to your nearest stop, or why we can't say. */
 @Composable
-private fun LiveStatusLine(stops: List<TripStop>, nearest: TripStop?, vehicle: TripVehicle?, routeColor: Color) {
+private fun LiveStatusLine(
+    stops: List<TripStop>,
+    nearest: TripStop?,
+    vehicle: TripVehicle?,
+    staleVehicle: TripVehicle?,
+    routeColor: Color,
+    now: Long
+) {
+    val first = stops.firstOrNull()
+    // Trip hasn't left its first stop yet (and no live bus says otherwise)
+    val notStarted = first != null && first.departureDate.time - now > 60_000 &&
+        (vehicle == null || (vehicle.currentStopSequence ?: 0) <= (first.stopSequence ?: 1))
     val vehicleSeq = vehicle?.currentStopSequence
     val nearestSeq = nearest?.stopSequence
-    val text = when {
-        vehicle == null && stops.any { it.hasLiveTime } -> "Live times · vehicle not yet tracking"
-        vehicle == null -> "Scheduled times · no live tracking"
-        vehicleSeq != null && nearestSeq != null -> {
+
+    val (icon, text) = when {
+        notStarted -> Icons.Default.Schedule to "Trip starts ${formatClock(first!!.departureDate)} at ${first.stopName}"
+        vehicle != null && vehicleSeq != null && nearestSeq != null -> {
             val away = nearestSeq - vehicleSeq + if (vehicle.isStoppedAt) 0 else 1
-            when {
-                away <= 0 -> "Arriving at your stop"
-                away == 1 -> "1 stop away from your stop"
-                else -> "$away stops away from your stop"
+            Icons.Default.MyLocation to when {
+                away <= 0 -> "Arriving at your nearest stop"
+                away == 1 -> "1 stop from your nearest stop"
+                else -> "$away stops from your nearest stop"
             }
         }
-        else -> "Vehicle is live on the map"
+        vehicle != null -> null to "Vehicle is live on the map"
+        staleVehicle != null -> Icons.Default.History to
+            "Bus last seen ${staleVehicle.ageSeconds?.let { formatAge(it) } ?: "a while ago"}"
+        stops.any { it.hasLiveTime } -> null to "Live times · vehicle not yet tracking"
+        else -> null to "Scheduled times · no live tracking"
     }
     val age = vehicle?.ageSeconds?.let { formatAge(it) }
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (vehicle != null || stops.any { it.hasLiveTime }) {
-            LiveIndicator(color = routeColor, modifier = Modifier.size(14.dp))
-            Spacer(Modifier.width(8.dp))
+        when {
+            icon != null -> Icon(icon, contentDescription = null, tint = routeColor, modifier = Modifier.size(18.dp))
+            vehicle != null || stops.any { it.hasLiveTime } -> LiveIndicator(color = routeColor, modifier = Modifier.size(14.dp))
         }
+        if (icon != null || vehicle != null || stops.any { it.hasLiveTime }) Spacer(Modifier.width(8.dp))
         Text(
             text,
             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
         )
         if (age != null) {
@@ -860,7 +882,7 @@ private fun Color.toArgbInt(): Int =
 /** Frame what matters: the vehicle, your stop, you, and the next few stops after yours. */
 private fun focusBoundingBox(detail: TripDetailResponse, userLat: Double?, userLon: Double?): BoundingBox? {
     val points = mutableListOf<GeoPoint>()
-    detail.vehicle?.let { points += GeoPoint(it.lat, it.lon) }
+    detail.vehicle?.takeIf { it.isLive }?.let { points += GeoPoint(it.lat, it.lon) }
     val nearestIdx = detail.stops.indexOfFirst { it.isNearest }
     if (nearestIdx >= 0) {
         val nearest = detail.stops[nearestIdx]
@@ -957,9 +979,12 @@ private fun rebuildTripMap(
                 label = if (isRail(detail.tripInfo.routeType)) "" else detail.tripInfo.routeShortName,
                 routeColor = routeColorInt,
                 routeTextColor = routeTextColorInt,
-                heading = v.heading,
+                // A stale fix gets no arrow: we don't know where it's heading now
+                heading = if (v.isLive) v.heading else null,
                 age = v.ageSeconds?.let { formatAge(it).removeSuffix(" ago") }
             )
+            // Faded: last known position, not live
+            if (!v.isLive) alpha = 0.45f
             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
             setInfoWindow(null)
         })

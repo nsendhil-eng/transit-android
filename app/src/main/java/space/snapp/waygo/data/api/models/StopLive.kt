@@ -5,8 +5,12 @@ data class TripLiveVehicle(
     val lon: Double,
     val bearing: Float,
     // False when the API couldn't work out a direction (vehicle off its route line)
-    val headingKnown: Boolean? = null
+    val headingKnown: Boolean? = null,
+    val ageSeconds: Int? = null,
+    val isStale: Boolean? = null
 ) {
+    val isLive: Boolean get() = isStale != true && (ageSeconds ?: 0) <= STALE_AFTER_S
+
     /** Direction of travel, or null if unknown — older API responses never had one. */
     val heading: Float? get() = bearing.takeIf { headingKnown == true }
 }
