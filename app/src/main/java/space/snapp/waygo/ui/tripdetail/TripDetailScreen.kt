@@ -121,6 +121,8 @@ fun TripDetailScreen(
 
     BackHandler(onBack = onBack)
 
+    // Location updates feed the next refresh rather than reloading the trip
+    LaunchedEffect(userLat, userLon) { viewModel.updateLocation(userLat, userLon) }
     LaunchedEffect(args) {
         viewModel.load(args.tripId, args.routeId, args.directionId, userLat, userLon)
     }
@@ -406,7 +408,15 @@ private fun TripSheetContent(
             }
         }
         item(key = "status") {
-            LiveStatusLine(stops = stops, nearest = nearest, vehicle = vehicle, staleVehicle = staleVehicle, routeColor = routeColor, now = now)
+            // Once this bus has gone past your stop, point at the next one instead
+            val nextAtYourStop = nextTrips.firstOrNull { it.tripId != detail.tripInfo.tripId }
+            LiveStatusLine(
+                stops = stops, nearest = nearest, vehicle = vehicle, staleVehicle = staleVehicle,
+                routeColor = routeColor, now = now,
+                nearestPassed = nearest?.isPassed(vehicle) == true,
+                nextTrip = nextAtYourStop,
+                onShowNext = { nextAtYourStop?.let { onSelectTrip(it.tripId) } }
+            )
         }
         if (alerts.visible.isNotEmpty()) {
             item(key = "alerts") {
@@ -572,7 +582,10 @@ private fun LiveStatusLine(
     vehicle: TripVehicle?,
     staleVehicle: TripVehicle?,
     routeColor: Color,
-    now: Long
+    now: Long,
+    nearestPassed: Boolean = false,
+    nextTrip: NextTrip? = null,
+    onShowNext: () -> Unit = {}
 ) {
     val first = stops.firstOrNull()
     // Trip hasn't left its first stop yet (and no live bus says otherwise)
@@ -581,7 +594,14 @@ private fun LiveStatusLine(
     val vehicleSeq = vehicle?.currentStopSequence
     val nearestSeq = nearest?.stopSequence
 
+    val nextMins = nextTrip?.let { t ->
+        (t.departureDate ?: todayAt(t.estimatedTime ?: t.scheduledTime))?.let { ((it.time - now) / 60_000).toInt() }
+    }
     val (icon, text) = when {
+        nearestPassed && nearest != null -> Icons.Default.History to buildString {
+            append("Passed your stop")
+            if (nextMins != null) append(if (nextMins >= 1) " · next in $nextMins min ›" else " · next one due now ›")
+        }
         notStarted -> Icons.Default.Schedule to "Trip starts ${formatClock(first!!.departureDate)} at ${first.stopName}"
         vehicle != null && vehicleSeq != null && nearestSeq != null -> {
             val away = nearestSeq - vehicleSeq + if (vehicle.isStoppedAt) 0 else 1
@@ -597,9 +617,13 @@ private fun LiveStatusLine(
         stops.any { it.hasLiveTime } -> null to "Live times · vehicle not yet tracking"
         else -> null to "Scheduled times · no live tracking"
     }
-    val age = vehicle?.ageSeconds?.let { formatAge(it) }
+    // Once the bus has passed you, its age/position no longer matter
+    val age = vehicle?.ageSeconds?.takeIf { !nearestPassed }?.let { formatAge(it) }
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (nearestPassed && nextTrip != null) Modifier.clickable(onClick = onShowNext) else Modifier)
+            .padding(horizontal = 20.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         when {
@@ -713,7 +737,15 @@ private fun StopTimelineRow(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            if (stop.isNearest) {
+            if (stop.isNearest && passed) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    // No time: GTFS-RT drops passed stops, so we'd only have the schedule
+                    "This bus has passed your stop",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else if (stop.isNearest) {
                 Spacer(Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (walkMins != null) {

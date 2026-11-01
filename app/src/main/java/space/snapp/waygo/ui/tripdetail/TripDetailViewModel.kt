@@ -8,6 +8,8 @@ import space.snapp.waygo.data.api.TransitApiService
 import space.snapp.waygo.data.api.models.NextTrip
 import space.snapp.waygo.data.api.models.TripDetailResponse
 
+private const val LOCATION_EVERY_MS = 60_000L
+
 class TripDetailViewModel : ViewModel() {
     private val api = TransitApiService.instance
 
@@ -128,6 +130,21 @@ class TripDetailViewModel : ViewModel() {
                 delay(10_000)
             }
         }
+    }
+
+    private var locationAppliedAt = 0L
+
+    /**
+     * Keep the user's position roughly current so "your nearest stop" follows them as they
+     * walk or ride. Taken at most once a minute; it rides along with the regular refresh
+     * and never triggers a request of its own.
+     */
+    fun updateLocation(userLat: Double?, userLon: Double?) {
+        if (userLat == null || userLon == null) return
+        val now = System.currentTimeMillis()
+        if (now - locationAppliedAt < LOCATION_EVERY_MS) return
+        locationAppliedAt = now
+        loadParams = loadParams?.copy(userLat = userLat, userLon = userLon)
     }
 
     fun stop() {
