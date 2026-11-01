@@ -28,6 +28,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.shape.RoundedCornerShape
 import space.snapp.waygo.ui.tripdetail.PRIORITY_KEY
 import space.snapp.waygo.ui.tripdetail.StopLabel
 import space.snapp.waygo.ui.tripdetail.StopLabelsOverlay
@@ -56,6 +57,10 @@ private const val PAN_SETTLE_MS = 1_500L
 private const val MAX_CALLOUT_STOPS = 30
 /** Refetch nearby stops only after moving this far (GPS updates every 10 s) */
 private const val REFETCH_STOPS_AFTER_M = 150.0
+/** Drag handle strip at the top of the bottom panel */
+private val SheetHandleHeight = 20.dp
+/** Room left above the panel when dragged all the way up: status bar, search and alert buttons */
+private val SHEET_TOP_GAP = 140.dp
 /** Zoom for a focused pair of stops (both sides of a road), so the two dots separate */
 private const val PAIR_FOCUS_ZOOM = 17.5
 /** Below this zoom only the mode-card stops are labelled */
@@ -69,10 +74,8 @@ fun NearbyStopsMapView(
     userAccuracyM: Float? = null,
     onAddStops: (List<Stop>) -> Unit,
     onDepartureClick: ((Departure) -> Unit)? = null,
-    /** Space taken by UI floating over the bottom of the map, so the re-centre button clears it */
-    bottomInset: Dp = 0.dp,
-    /** Height of the mode cards along the bottom, so UI above the map can sit over them */
-    onCardsHeight: (Int) -> Unit = {}
+    /** Shown at the end of the bottom panel's list (the save prompt) */
+    sheetFooter: @Composable () -> Unit = {}
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -100,6 +103,9 @@ fun NearbyStopsMapView(
     LaunchedEffect(Unit) { while (true) { delay(15_000); cardsTick++ } }
     val modeCards = remember(stopGroups, nearbyDeps, userLat, userLon, cardsTick) {
         buildModeCards(stopGroups, nearbyDeps, userLat, userLon)
+    }
+    val nearbyStops = remember(stopGroups, nearbyDeps, userLat, userLon, cardsTick) {
+        buildNearbyStops(stopGroups, nearbyDeps, userLat, userLon)
     }
 
     LaunchedEffect(Unit) {
@@ -291,78 +297,97 @@ fun NearbyStopsMapView(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    Box(Modifier.fillMaxSize()) {
-        AndroidView(
-            factory = { ctx ->
-                MapView(ctx).apply {
-                    setTileSource(ESRI_DARK_GRAY_BASE)
-                    addDarkCanvasLabels(ctx)
-                    setMultiTouchControls(true)
-                    // Pinch to zoom; osmdroid's own −/+ buttons clash with the dark map
-                    zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
-                    controller.setZoom(16.5)
-                    controller.setCenter(GeoPoint(userLat ?: BRISBANE_LAT, userLon ?: BRISBANE_LON))
-                    overlays.add(youOverlay)
-                    // Dragging the map stops following you (pinch-zoom keeps it)
-                    setOnTouchListener { _, ev ->
-                        if (ev.actionMasked == MotionEvent.ACTION_MOVE) {
-                            lastPanMs[0] = System.currentTimeMillis()
-                            if (ev.pointerCount == 1) following = false
+    val density = LocalDensity.current
+    var peekPx by remember { mutableIntStateOf(0) }
+    val peekHeight = SheetHandleHeight + with(density) { peekPx.toDp() }
+    val scaffoldState = rememberBottomSheetScaffoldState()
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        // Dragged up, the panel stops below the search / alert buttons
+        val sheetMax = maxHeight - SHEET_TOP_GAP
+        BottomSheetScaffold(
+            scaffoldState = scaffoldState,
+            sheetPeekHeight = if (peekPx == 0) 120.dp else peekHeight,
+            sheetContainerColor = SheetBg,
+            sheetShadowElevation = 12.dp,
+            sheetDragHandle = {
+                Box(Modifier.fillMaxWidth().height(SheetHandleHeight), contentAlignment = Alignment.Center) {
+                    Surface(shape = RoundedCornerShape(2.dp), color = ComposeColor(0xFF444C56), modifier = Modifier.size(36.dp, 4.dp)) {}
+                }
+            },
+            sheetContent = {
+                HomeSheetContent(
+                    cards = modeCards,
+                    stops = nearbyStops,
+                    focusedGroupId = focusedGroupId,
+                    updatedAtMs = depsUpdatedMs,
+                    onCardTap = { card ->
+                        if (focusedGroupId == card.group.id) {
+                            // Both sides of the road in one sheet
+                            selectedGroupState.value = card.asOneGroup()
+                        } else {
+                            focusedGroupId = card.group.id
+                            following = false
+                            // Centre between the sides, so both highlighted dots are in view; zoom in on a
+                            // pair, whose stops are often only ~40 m apart and would overlap
+                            val centre = GeoPoint(card.groups.map { it.latitude }.average(), card.groups.map { it.longitude }.average())
+                            val map = mapRef.value
+                            if (card.sides.size > 1 && map != null && map.zoomLevelDouble < PAIR_FOCUS_ZOOM)
+                                map.controller.animateTo(centre, PAIR_FOCUS_ZOOM, 600L)
+                            else map?.controller?.animateTo(centre)
                         }
-                        false
-                    }
-                }.also { mapRef.value = it }
+                    },
+                    onStopTap = { selectedGroupState.value = it },
+                    onPeekHeight = { peekPx = it },
+                    footer = sheetFooter,
+                    modifier = Modifier.heightIn(max = sheetMax)
+                )
             },
-            modifier = Modifier.fillMaxSize()
-        )
-
-        var cardsHeightPx by remember { mutableIntStateOf(0) }
-        val cardsHeight = with(LocalDensity.current) { cardsHeightPx.toDp() }
-        SmallFloatingActionButton(
-            onClick = {
-                following = true
-                youOverlay.position?.let { mapRef.value?.controller?.animateTo(it) }
-            },
-            containerColor = ComposeColor(0xFF22272E),
-            contentColor = ComposeColor(0xFF4FB3FF),
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 12.dp, bottom = 12.dp + cardsHeight + bottomInset)
+            containerColor = ComposeColor.Transparent
         ) {
-            Icon(
-                if (following) Icons.Default.MyLocation else Icons.Default.LocationSearching,
-                contentDescription = "Back to my location"
+            Box(Modifier.fillMaxSize()) {
+            AndroidView(
+                factory = { ctx ->
+                    MapView(ctx).apply {
+                        setTileSource(ESRI_DARK_GRAY_BASE)
+                        addDarkCanvasLabels(ctx)
+                        setMultiTouchControls(true)
+                        // Pinch to zoom; osmdroid's own −/+ buttons clash with the dark map
+                        zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
+                        controller.setZoom(16.5)
+                        controller.setCenter(GeoPoint(userLat ?: BRISBANE_LAT, userLon ?: BRISBANE_LON))
+                        overlays.add(youOverlay)
+                        // Dragging the map stops following you (pinch-zoom keeps it)
+                        setOnTouchListener { _, ev ->
+                            if (ev.actionMasked == MotionEvent.ACTION_MOVE) {
+                                lastPanMs[0] = System.currentTimeMillis()
+                                if (ev.pointerCount == 1) following = false
+                            }
+                            false
+                        }
+                    }.also { mapRef.value = it }
+                },
+                modifier = Modifier.fillMaxSize()
             )
-        }
 
-        ModeCardsRow(
-            cards = modeCards,
-            focusedGroupId = focusedGroupId,
-            updatedAtMs = depsUpdatedMs,
-            onTap = { card ->
-                if (focusedGroupId == card.group.id) {
-                    // Both sides of the road in one sheet
-                    selectedGroupState.value = card.asOneGroup()
-                } else {
-                    focusedGroupId = card.group.id
-                    following = false
-                    // Centre between the sides, so both highlighted dots are in view; zoom in on a
-                    // pair, whose stops are often only ~40 m apart and would overlap
-                    val centre = GeoPoint(card.groups.map { it.latitude }.average(), card.groups.map { it.longitude }.average())
-                    val map = mapRef.value
-                    if (card.sides.size > 1 && map != null && map.zoomLevelDouble < PAIR_FOCUS_ZOOM)
-                        map.controller.animateTo(centre, PAIR_FOCUS_ZOOM, 600L)
-                    else map?.controller?.animateTo(centre)
+                SmallFloatingActionButton(
+                    onClick = {
+                        following = true
+                        youOverlay.position?.let { mapRef.value?.controller?.animateTo(it) }
+                    },
+                    containerColor = ComposeColor(0xFF22272E),
+                    contentColor = ComposeColor(0xFF4FB3FF),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 12.dp, bottom = 12.dp + peekHeight)
+                ) {
+                    Icon(
+                        if (following) Icons.Default.MyLocation else Icons.Default.LocationSearching,
+                        contentDescription = "Back to my location"
+                    )
                 }
-            },
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 12.dp)
-                .onSizeChanged {
-                    cardsHeightPx = if (modeCards.isEmpty()) 0 else it.height
-                    onCardsHeight(cardsHeightPx + if (modeCards.isEmpty()) 0 else (12 * context.resources.displayMetrics.density).toInt())
-                }
-        )
+            }
+        }
     }
 
     val selectedGroup = selectedGroupState.value

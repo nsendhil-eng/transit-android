@@ -1,6 +1,7 @@
 package space.snapp.waygo.ui.search
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -79,9 +80,6 @@ fun SearchScreen(
     // The save prompt opens as a card until closed or something is saved, then stays as a pill
     var savePromptClosed by rememberSaveable { mutableStateOf(false) }
     val savePromptExpanded = favorites.isEmpty() && !savePromptClosed
-    var savePromptHeightPx by remember { mutableIntStateOf(0) }
-    // The map's mode cards along the bottom; the save prompt sits above them
-    var mapCardsHeightPx by remember { mutableIntStateOf(0) }
 
     // Search is a round button until tapped; the bar stays while there's a query or chosen stops
     var searchOpen by rememberSaveable { mutableStateOf(false) }
@@ -131,9 +129,18 @@ fun SearchScreen(
             userLat = userLat,
             userLon = userLon,
             userAccuracyM = userAccuracyM,
-            // Keep the re-centre button above the save card while it's open
-            bottomInset = with(density) { savePromptHeightPx.toDp() },
-            onCardsHeight = { mapCardsHeightPx = it },
+            // The save prompt sits at the end of the map's bottom panel
+            sheetFooter = {
+                SaveStopsPrompt(
+                    expanded = savePromptExpanded,
+                    onAdd = { name ->
+                        stopsForSaving = emptyList()
+                        saveName = name
+                        showSaveSheet = true
+                    },
+                    onCollapse = { savePromptClosed = true }
+                )
+            },
             onAddStops = { stops -> stops.forEach { viewModel.addStop(it) } },
             onDepartureClick = { dep ->
                 onTripSelected(
@@ -152,6 +159,7 @@ fun SearchScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .statusBarsPadding()
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
 
@@ -450,6 +458,7 @@ fun SearchScreen(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .fillMaxWidth()
+                    .statusBarsPadding()
                     .padding(start = 12.dp, end = 6.dp, top = 8.dp)
             ) {
                 Surface(
@@ -472,19 +481,6 @@ fun SearchScreen(
                     modifier = Modifier.weight(1f, fill = false)
                 )
             }
-            SaveStopsPrompt(
-                expanded = savePromptExpanded,
-                onAdd = { name ->
-                    stopsForSaving = emptyList()
-                    saveName = name
-                    showSaveSheet = true
-                },
-                onCollapse = { savePromptClosed = true },
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 12.dp + with(density) { mapCardsHeightPx.toDp() })
-                    .onSizeChanged { savePromptHeightPx = if (savePromptExpanded) it.height else 0 }
-            )
         }
 
         // All alerts — full-screen overlay
@@ -494,7 +490,9 @@ fun SearchScreen(
             exit = slideOutVertically(targetOffsetY = { it / 6 }) + fadeOut(),
             modifier = Modifier.fillMaxSize()
         ) {
-            AlertsPage(alerts = networkAlerts, onBack = { showAllAlerts = false })
+            Box(Modifier.background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
+                AlertsPage(alerts = networkAlerts, onBack = { showAllAlerts = false })
+            }
         }
 
         // Itinerary detail — full-screen overlay inside the same Box so it covers the map
@@ -505,12 +503,14 @@ fun SearchScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             selectedItinerary?.let { itinerary ->
+                Box(Modifier.background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
                 ItineraryDetailScreen(
                     itinerary = itinerary,
                     fromName = fromSelected?.shortName ?: "",
                     toName = toSelected?.shortName ?: "",
                     onBack = { selectedItinerary = null }
                 )
+                }
             }
         }
     }

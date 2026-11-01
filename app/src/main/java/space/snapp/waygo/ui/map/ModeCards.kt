@@ -103,6 +103,30 @@ fun buildModeCards(
     }
 }
 
+/** One nearby stop and its next departures, for the list in the expanded panel */
+data class NearbyStop(val group: StopGroup, val distanceM: Double, val departures: List<Departure>)
+
+/** Every nearby stop, nearest first, with its next departures (one per route + direction) */
+fun buildNearbyStops(
+    groups: List<StopGroup>,
+    departures: List<Departure>,
+    userLat: Double?,
+    userLon: Double?
+): List<NearbyStop> {
+    val groupOfStop = groups.flatMap { g -> g.stops.map { it.id to g.id } }.toMap()
+    val byGroup = departures
+        .filter { !it.notRunningHere && it.liveSeconds > -DEPARTED_GRACE_S }
+        .groupBy { groupOfStop[it.stopId] }
+    return groups.map { g ->
+        val d = if (userLat != null && userLon != null) approxMeters(userLat, userLon, g.latitude, g.longitude)
+            else g.stops.firstOrNull()?.distanceMeters ?: 0.0
+        NearbyStop(g, d, byGroup[g.id].orEmpty()
+            .sortedBy { it.liveSeconds }
+            .distinctBy { "${it.routeId}|${it.directionId}" }
+            .take(MODE_CARD_ROWS))
+    }.sortedBy { it.distanceM }
+}
+
 val Departure.mode: VehicleType
     get() = when (vehicleType) {
         VehicleType.Rail.label -> VehicleType.Rail

@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import android.os.Looper
@@ -151,8 +152,9 @@ fun WayGoApp() {
     }
 
     Scaffold(
+        // The map tab has no title bar: the map runs up behind the status bar
         topBar = {
-            CenterAlignedTopAppBar(
+            if (currentScreen != Screen.Search) CenterAlignedTopAppBar(
                 title = {
                     Text(
                         "WayGo",
@@ -175,7 +177,13 @@ fun WayGoApp() {
             }
         }
     ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+        val edgeToEdge = currentScreen == Screen.Search
+        Box(
+            modifier = Modifier.fillMaxSize().padding(
+                top = if (edgeToEdge) 0.dp else padding.calculateTopPadding(),
+                bottom = padding.calculateBottomPadding()
+            )
+        ) {
             when (currentScreen) {
                 Screen.Search -> SearchScreen(
                     viewModel = searchVM,
@@ -217,6 +225,8 @@ fun WayGoApp() {
             ) {
                 tripDetailArgs?.let { args ->
                     Surface(modifier = Modifier.fillMaxSize()) {
+                        // Over the edge-to-edge map tab, keep clear of the status bar
+                        Box(if (edgeToEdge) Modifier.statusBarsPadding() else Modifier) {
                         TripDetailScreen(
                             args = args,
                             userLat = userLat,
@@ -224,6 +234,7 @@ fun WayGoApp() {
                             viewModel = tripDetailVM,
                             onBack = { tripDetailArgs = null }
                         )
+                        }
                     }
                 }
             }
