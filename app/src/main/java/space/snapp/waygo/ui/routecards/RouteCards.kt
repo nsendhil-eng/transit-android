@@ -128,6 +128,17 @@ fun RouteGroupCard(
             DirectionCardContent(group.directions.first(), now, onDepartureClick, showStopName, disruptedRouteIds)
         } else {
             val pagerState = rememberPagerState { group.directions.size }
+            // Directions are re-ranked on every refresh (soonest catchable first). Hold on to
+            // the direction the user is looking at so the card doesn't flip under them.
+            var shownKey by remember(group.key) { mutableStateOf(group.directions.first().key) }
+            LaunchedEffect(pagerState.settledPage) {
+                group.directions.getOrNull(pagerState.settledPage)?.let { shownKey = it.key }
+            }
+            val keys = group.directions.map { it.key }
+            LaunchedEffect(keys) {
+                val idx = keys.indexOf(shownKey)
+                if (idx >= 0 && idx != pagerState.currentPage) pagerState.scrollToPage(idx)
+            }
             Column {
                 HorizontalPager(state = pagerState) { page ->
                     DirectionCardContent(group.directions[page], now, onDepartureClick, showStopName, disruptedRouteIds)
@@ -152,7 +163,9 @@ fun RouteGroupCard(
                     }
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        "Swipe for ${displayHeadsign(other)}",
+                        // Include the other direction's next time so it's never hidden
+                        "Swipe for ${displayHeadsign(other)}" +
+                            (other.departures.firstOrNull()?.let { " · " + shortCountdown(it, now) } ?: ""),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -248,7 +261,7 @@ private fun DirectionCardContent(
         }
 
         Spacer(Modifier.width(8.dp))
-        NextDepartures(card.departures, walkSecs, now)
+        NextDepartures(card.departures, now)
     }
 }
 
@@ -277,12 +290,10 @@ private fun RouteBadge(card: DirectionCard, routeColor: Color, routeTextColor: C
 
 /** Big countdown for the next service, its live status, and the following two. */
 @Composable
-private fun NextDepartures(departures: List<Departure>, walkSecs: Int?, now: Long) {
+private fun NextDepartures(departures: List<Departure>, now: Long) {
     val next = departures.first()
     val secs = ((next.departureDate.time - now) / 1000).toInt()
-    // Dim a departure you can't reach on foot in time
-    val missable = walkSecs != null && secs in 0 until walkSecs
-    val fg = MaterialTheme.colorScheme.onSurface.copy(alpha = if (missable) 0.45f else 1f)
+    val fg = MaterialTheme.colorScheme.onSurface
     val isLive = next.isRealtime ?: (next.expectedDepartureUtc != null)
 
     Column(horizontalAlignment = Alignment.End) {
@@ -329,6 +340,16 @@ private fun NextDepartures(departures: List<Departure>, walkSecs: Int?, now: Lon
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+/** "Now", "4 min" or "8:17 PM" for one-line hints. */
+private fun shortCountdown(d: Departure, now: Long): String {
+    val secs = ((d.departureDate.time - now) / 1000).toInt()
+    return when {
+        secs < 60 -> "Now"
+        secs < 3600 -> "${secs / 60} min"
+        else -> formatClock(d.departureDate)
+    }
+}
 
 /** "3" + "min", "Now", or a clock time "8:17" + "PM" for departures over an hour away. */
 private fun countdownParts(secs: Int, date: Date): Pair<String, String> = when {

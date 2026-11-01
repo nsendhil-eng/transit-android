@@ -90,8 +90,9 @@ class BuildRouteGroupsTest {
     }
 
     @Test
-    fun `cards sort by the first departure you can still walk to`() {
-        // 400 m = 5 min walk; the 2-min train is uncatchable so the card ranks by its 20-min one
+    fun `cards sort by soonest departure, regardless of walking time`() {
+        // 400 m = 5 min walk: the 2-min train may not be reachable on foot, but the user could
+        // be dropped off or the train could be late, so it still ranks first
         val stops = listOf(stop("far", 400.0, parent = "st"), stop("bus", 80.0, routeType = 3))
         val deps = listOf(
             dep("t1", "far", 2, "Ipswich station"),
@@ -101,7 +102,21 @@ class BuildRouteGroupsTest {
 
         val groups = buildRouteGroups(deps, stops, null, now)
 
-        assertEquals("412", groups.first().directions.first().routeNumber)
+        assertEquals("Ipswich station", groups.first().directions.first().headsign)
+        assertEquals(listOf(2, 20), minutesOf(groups.first().directions.first()))
+    }
+
+    @Test
+    fun `the soonest direction of a route is its front page`() {
+        val stops = listOf(stop("b1", 150.0, routeType = 3), stop("b2", 160.0, routeType = 3))
+        val deps = listOf(
+            dep("m", "b1", 1, "Moggill", type = "Bus", route = "444", routeId = "444-1", direction = 1),
+            dep("q", "b2", 14, "Queensland Theatre", type = "Bus", route = "444", routeId = "444-1", direction = 0)
+        )
+
+        val group = buildRouteGroups(deps, stops, null, now).single()
+
+        assertEquals("Moggill", group.directions.first().headsign)
     }
 
     @Test

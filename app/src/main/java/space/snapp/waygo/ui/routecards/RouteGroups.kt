@@ -26,13 +26,13 @@ data class DirectionCard(
 
     val walkSeconds: Int? get() = distanceMeters?.let { (it / WALK_METRES_PER_MIN * 60).toInt() }
 
-    /** Seconds until the first departure you could still reach on foot — used for ordering. */
-    fun catchableIn(now: Long): Long {
-        val walkMs = (walkSeconds ?: 0) * 1000L
-        val first = departures.firstOrNull { it.departureDate.time - now >= walkMs }
-            ?: return Long.MAX_VALUE / 2
-        return (first.departureDate.time - now) / 1000
-    }
+    /**
+     * Seconds until the next departure — used for ordering. Deliberately ignores walking time:
+     * the app can't know if the user will run, get dropped off or the bus is late, and a
+     * departure ranked down or hidden for being "uncatchable" just looks like it's missing.
+     */
+    fun nextIn(now: Long): Long =
+        departures.firstOrNull()?.let { (it.departureDate.time - now) / 1000 } ?: (Long.MAX_VALUE / 2)
 }
 
 /** A route with its directions as swipeable pages (trains: one destination per group). */
@@ -44,7 +44,7 @@ fun availableModes(departures: List<Departure>): List<VehicleType> =
 
 /**
  * Collapse a flat departure list into route cards: one per route + direction at its nearest
- * stop, bus directions paired as pages, sorted by how soon you could catch one on foot.
+ * stop, bus directions paired as pages, soonest departure first.
  */
 fun buildRouteGroups(
     departures: List<Departure>,
@@ -96,8 +96,8 @@ fun buildRouteGroups(
             // Bus/ferry/tram: pair both directions of a route; rail directions are separate routes
             if (card.vehicleType == VehicleType.Rail) card.key else card.key.substringBeforeLast("|")
         }
-        .map { (key, dirs) -> RouteGroup(key, dirs.sortedBy { it.catchableIn(now) }) }
-        .sortedBy { it.directions.first().catchableIn(now) }
+        .map { (key, dirs) -> RouteGroup(key, dirs.sortedBy { it.nextIn(now) }) }
+        .sortedBy { it.directions.first().nextIn(now) }
 }
 
 val Departure.mode: VehicleType
