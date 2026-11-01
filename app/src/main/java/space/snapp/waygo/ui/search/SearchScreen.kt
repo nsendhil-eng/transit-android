@@ -36,6 +36,8 @@ import space.snapp.waygo.ui.favorites.AddFavouriteSheet
 import space.snapp.waygo.ui.favorites.FavoritesViewModel
 import space.snapp.waygo.ui.favorites.SaveStopsPrompt
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import space.snapp.waygo.ui.map.NearbyStopsMapView
 import space.snapp.waygo.ui.plan.ItineraryDetailScreen
 import space.snapp.waygo.ui.plan.PlanCard
@@ -51,6 +53,7 @@ fun SearchScreen(
     planViewModel: PlanViewModel,
     userLat: Double?,
     userLon: Double?,
+    userAccuracyM: Float? = null,
     networkAlertsVM: NetworkAlertsViewModel,
     onTripSelected: (TripDetailArgs) -> Unit = {}
 ) {
@@ -70,6 +73,9 @@ fun SearchScreen(
     val favorites by favoritesVM.favorites.collectAsState()
     // The save prompt opens as a card until closed or something is saved, then stays as a pill
     var savePromptClosed by rememberSaveable { mutableStateOf(false) }
+    val savePromptExpanded = favorites.isEmpty() && !savePromptClosed
+    var savePromptHeightPx by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
     var inPlanMode by remember { mutableStateOf(false) }
     var selectedItinerary by remember { mutableStateOf<Itinerary?>(null) }
     var showAllAlerts by remember { mutableStateOf(false) }
@@ -89,6 +95,9 @@ fun SearchScreen(
         NearbyStopsMapView(
             userLat = userLat,
             userLon = userLon,
+            userAccuracyM = userAccuracyM,
+            // Keep the re-centre button above the save card while it's open
+            bottomInset = with(density) { savePromptHeightPx.toDp() },
             onAddStops = { stops -> stops.forEach { viewModel.addStop(it) } },
             onDepartureClick = { dep ->
                 onTripSelected(
@@ -395,7 +404,7 @@ fun SearchScreen(
                     .padding(start = 12.dp, end = 12.dp, top = 84.dp)
             )
             SaveStopsPrompt(
-                expanded = favorites.isEmpty() && !savePromptClosed,
+                expanded = savePromptExpanded,
                 onAdd = { name ->
                     stopsForSaving = emptyList()
                     saveName = name
@@ -405,6 +414,7 @@ fun SearchScreen(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .padding(12.dp)
+                    .onSizeChanged { savePromptHeightPx = if (savePromptExpanded) it.height else 0 }
             )
         }
 

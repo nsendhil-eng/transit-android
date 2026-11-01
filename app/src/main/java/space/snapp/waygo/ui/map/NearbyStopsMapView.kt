@@ -10,6 +10,11 @@ import android.graphics.drawable.BitmapDrawable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.LocationSearching
+import androidx.compose.material.icons.filled.MyLocation
+import android.view.MotionEvent
+import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.unit.Dp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,6 +28,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.delay
 import org.osmdroid.config.Configuration
 import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
@@ -44,8 +50,11 @@ private const val STOP_LIVE_REFRESH_MS = 5_000L
 fun NearbyStopsMapView(
     userLat: Double?,
     userLon: Double?,
+    userAccuracyM: Float? = null,
     onAddStops: (List<Stop>) -> Unit,
-    onDepartureClick: ((Departure) -> Unit)? = null
+    onDepartureClick: ((Departure) -> Unit)? = null,
+    /** Space taken by UI floating over the bottom of the map, so the re-centre button clears it */
+    bottomInset: Dp = 0.dp
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -55,16 +64,32 @@ fun NearbyStopsMapView(
     var tripLiveData by remember { mutableStateOf<List<TripLive>>(emptyList()) }
     val selectedGroupState = remember { mutableStateOf<StopGroup?>(null) }
     val mapRef = remember { mutableStateOf<MapView?>(null) }
+    val youOverlay = remember { UserLocationOverlay(context) }
+    val heading by rememberCompassHeading()
+    // The map follows you until you pan it; the re-centre button turns following back on
+    var following by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
         Configuration.getInstance().userAgentValue = context.packageName
+    }
+
+    // Move the dot (and the map, while following) whenever location changes
+    LaunchedEffect(userLat, userLon, userAccuracyM) {
+        if (userLat == null || userLon == null) return@LaunchedEffect
+        youOverlay.position = GeoPoint(userLat, userLon)
+        youOverlay.accuracyM = userAccuracyM
+        if (following) mapRef.value?.controller?.animateTo(youOverlay.position)
+        mapRef.value?.invalidate()
+    }
+    LaunchedEffect(heading) {
+        youOverlay.heading = heading
+        mapRef.value?.invalidate()
     }
 
     // Fetch nearby stops whenever location changes
     LaunchedEffect(userLat, userLon) {
         val lat = userLat ?: BRISBANE_LAT
         val lon = userLon ?: BRISBANE_LON
-        mapRef.value?.controller?.animateTo(GeoPoint(lat, lon))
         runCatching { api.stopsNearMe(lat, lon, radius = 500) }
             .onSuccess { stops -> stopGroups = groupStops(stops) }
     }
@@ -149,6 +174,9 @@ fun NearbyStopsMapView(
             }
         }
 
+        // You, under the stops so they stay tappable
+        map.overlays.add(youOverlay)
+
         // Stop markers on top
         for (group in stopGroups) {
             val marker = Marker(map).apply {
@@ -179,18 +207,45 @@ fun NearbyStopsMapView(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    AndroidView(
-        factory = { ctx ->
-            MapView(ctx).apply {
-                setTileSource(ESRI_DARK_GRAY_BASE)
-                addDarkCanvasLabels(ctx)
-                setMultiTouchControls(true)
-                controller.setZoom(16.5)
-                controller.setCenter(GeoPoint(userLat ?: BRISBANE_LAT, userLon ?: BRISBANE_LON))
-            }.also { mapRef.value = it }
-        },
-        modifier = Modifier.fillMaxSize()
-    )
+    Box(Modifier.fillMaxSize()) {
+        AndroidView(
+            factory = { ctx ->
+                MapView(ctx).apply {
+                    setTileSource(ESRI_DARK_GRAY_BASE)
+                    addDarkCanvasLabels(ctx)
+                    setMultiTouchControls(true)
+                    // Pinch to zoom; osmdroid's own −/+ buttons clash with the dark map
+                    zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
+                    controller.setZoom(16.5)
+                    controller.setCenter(GeoPoint(userLat ?: BRISBANE_LAT, userLon ?: BRISBANE_LON))
+                    overlays.add(youOverlay)
+                    // Dragging the map stops following you (pinch-zoom keeps it)
+                    setOnTouchListener { _, ev ->
+                        if (ev.actionMasked == MotionEvent.ACTION_MOVE && ev.pointerCount == 1) following = false
+                        false
+                    }
+                }.also { mapRef.value = it }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+
+        SmallFloatingActionButton(
+            onClick = {
+                following = true
+                youOverlay.position?.let { mapRef.value?.controller?.animateTo(it) }
+            },
+            containerColor = ComposeColor(0xFF22272E),
+            contentColor = ComposeColor(0xFF4FB3FF),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 12.dp, bottom = 12.dp + bottomInset)
+        ) {
+            Icon(
+                if (following) Icons.Default.MyLocation else Icons.Default.LocationSearching,
+                contentDescription = "Back to my location"
+            )
+        }
+    }
 
     val selectedGroup = selectedGroupState.value
     if (selectedGroup != null) {

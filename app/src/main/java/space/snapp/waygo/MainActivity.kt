@@ -77,6 +77,7 @@ fun WayGoApp() {
     }
     var userLat by remember { mutableStateOf<Double?>(null) }
     var userLon by remember { mutableStateOf<Double?>(null) }
+    var userAccuracy by remember { mutableStateOf<Float?>(null) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -91,14 +92,14 @@ fun WayGoApp() {
         val client = LocationServices.getFusedLocationProviderClient(context)
         // Immediate best-effort fix from cache
         client.lastLocation.addOnSuccessListener { loc ->
-            loc?.let { userLat = it.latitude; userLon = it.longitude }
+            loc?.let { userLat = it.latitude; userLon = it.longitude; userAccuracy = it.accuracy.takeIf { _ -> it.hasAccuracy() } }
         }
         val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10_000L)
             .setMinUpdateIntervalMillis(5_000L)
             .build()
         val callback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
-                result.lastLocation?.let { userLat = it.latitude; userLon = it.longitude }
+                result.lastLocation?.let { userLat = it.latitude; userLon = it.longitude; userAccuracy = it.accuracy.takeIf { _ -> it.hasAccuracy() } }
             }
         }
         client.requestLocationUpdates(request, callback, Looper.getMainLooper())
@@ -183,6 +184,7 @@ fun WayGoApp() {
                     planViewModel = planVM,
                     userLat = userLat,
                     userLon = userLon,
+                    userAccuracyM = userAccuracy,
                     networkAlertsVM = networkAlertsVM,
                     onTripSelected = { tripDetailArgs = it }
                 )
