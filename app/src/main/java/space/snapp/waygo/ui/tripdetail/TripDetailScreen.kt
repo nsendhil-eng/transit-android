@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -90,6 +91,8 @@ data class TripDetailArgs(
 )
 
 private const val WALK_METRES_PER_MIN = 80.0
+
+private val CancelRed = Color(0xFFEF5350)
 
 // Floating header (40 dp buttons + 10 dp vertical padding) plus breathing room
 private val HeaderHeight = 76.dp
@@ -442,14 +445,15 @@ private fun TripSheetContent(
             }
         }
         item(key = "status") {
-            // Once this bus has gone past your stop, point at the next one instead
-            val nextAtYourStop = nextTrips.firstOrNull { it.tripId != detail.tripInfo.tripId }
+            // Once this bus has gone past your stop (or is cancelled), point at the next one
+            val nextAtYourStop = nextTrips.firstOrNull { it.tripId != detail.tripInfo.tripId && it.isCancelled != true }
             LiveStatusLine(
                 stops = stops, nearest = nearest, vehicle = vehicle, staleVehicle = staleVehicle,
                 routeColor = routeColor, now = now,
                 nearestPassed = nearest?.isPassed(vehicle) == true,
                 nextTrip = nextAtYourStop,
-                onShowNext = { nextAtYourStop?.let { onSelectTrip(it.tripId) } }
+                onShowNext = { nextAtYourStop?.let { onSelectTrip(it.tripId) } },
+                cancelled = detail.tripInfo.isCancelled == true
             )
         }
         if (alerts.visible.isNotEmpty()) {
@@ -577,10 +581,12 @@ private fun DepartureTiles(
                     }
                     Text(unit, color = fg.copy(alpha = 0.8f), style = MaterialTheme.typography.labelMedium)
                     Spacer(Modifier.height(2.dp))
-                    val (label, _) = delayLabel(isLive, trip.delaySeconds)
+                    val (label, _) = if (trip.isCancelled == true) "Cancelled" to null
+                        else delayLabel(isLive, trip.delaySeconds)
                     Text(
                         label,
-                        color = fg.copy(alpha = 0.85f),
+                        color = if (trip.isCancelled == true) CancelRed else fg.copy(alpha = 0.85f),
+                        fontWeight = if (trip.isCancelled == true) FontWeight.Bold else null,
                         style = MaterialTheme.typography.labelSmall,
                         maxLines = 1
                     )
@@ -620,7 +626,8 @@ private fun LiveStatusLine(
     now: Long,
     nearestPassed: Boolean = false,
     nextTrip: NextTrip? = null,
-    onShowNext: () -> Unit = {}
+    onShowNext: () -> Unit = {},
+    cancelled: Boolean = false
 ) {
     val first = stops.firstOrNull()
     // Trip hasn't left its first stop yet (and no live bus says otherwise)
@@ -635,6 +642,10 @@ private fun LiveStatusLine(
     val (icon, text) = when {
         nearestPassed && nearest != null -> Icons.Default.History to buildString {
             append("Passed your stop")
+            if (nextMins != null) append(if (nextMins >= 1) " · next in $nextMins min ›" else " · next one due now ›")
+        }
+        cancelled -> Icons.Default.Cancel to buildString {
+            append("This trip is cancelled")
             if (nextMins != null) append(if (nextMins >= 1) " · next in $nextMins min ›" else " · next one due now ›")
         }
         notStarted -> Icons.Default.Schedule to "Trip starts ${formatClock(first!!.departureDate)} at ${first.stopName}"
@@ -660,12 +671,12 @@ private fun LiveStatusLine(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (nearestPassed && nextTrip != null) Modifier.clickable(onClick = onShowNext) else Modifier)
+            .then(if ((nearestPassed || cancelled) && nextTrip != null) Modifier.clickable(onClick = onShowNext) else Modifier)
             .padding(horizontal = 20.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         when {
-            icon != null -> Icon(icon, contentDescription = null, tint = routeColor, modifier = Modifier.size(18.dp))
+            icon != null -> Icon(icon, contentDescription = null, tint = if (cancelled) CancelRed else routeColor, modifier = Modifier.size(18.dp))
             vehicle != null || stops.any { it.hasLiveTime } -> LiveIndicator(color = routeColor, modifier = Modifier.size(14.dp))
         }
         if (icon != null || vehicle != null || stops.any { it.hasLiveTime }) Spacer(Modifier.width(8.dp))
@@ -832,7 +843,8 @@ private fun StopTimelineRow(
                     formatClock(stop.departureDate),
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                 )
-                val (label, color) = delayLabel(stop.hasLiveTime, stop.delaySeconds)
+                val (label, color) = if (stop.isSkipped == true) "Skipped" to CancelRed
+                    else delayLabel(stop.hasLiveTime, stop.delaySeconds)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     // Strike through the timetable time when the live time differs
                     if (stop.hasLiveTime && (stop.delaySeconds ?: 0).let { it >= 60 || it <= -60 }) {

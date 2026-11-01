@@ -23,8 +23,14 @@ data class Departure(
     val routeLongName: String?,
     // Nullable: older API responses omit these
     val isRealtime: Boolean? = null,
-    val delaySeconds: Int? = null
+    val delaySeconds: Int? = null,
+    val isCancelled: Boolean? = null,
+    // This stop is skipped on this trip (e.g. a diversion)
+    val isSkipped: Boolean? = null
 ) {
+    /** Not running from this stop: the trip is cancelled, or skips it. */
+    val notRunningHere: Boolean get() = isCancelled == true || isSkipped == true
+
     val id: String get() = "$tripId-$stopId"
 
     val departureDate: Date

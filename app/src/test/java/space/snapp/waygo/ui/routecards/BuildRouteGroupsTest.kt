@@ -23,13 +23,15 @@ class BuildRouteGroupsTest {
     private fun dep(
         trip: String, stopId: String, minutes: Int, headsign: String,
         type: String = "Train", route: String = "CAIP", routeId: String = route, direction: Int = 0,
-        platform: String? = null
+        platform: String? = null,
+        cancelled: Boolean? = null
     ) = Departure(
         tripId = trip, stopId = stopId, stopName = "Stop $stopId", vehicleType = type,
         routeNumber = route, routeId = routeId, headsign = headsign, directionId = direction,
         scheduledDepartureUtc = iso.format(now + minutes * 60_000L), expectedDepartureUtc = null,
         secondsUntilDeparture = minutes * 60, platformCode = platform,
-        routeColor = null, routeTextColor = null, routeLongName = null
+        routeColor = null, routeTextColor = null, routeLongName = null,
+        isCancelled = cancelled
     )
 
     private fun minutesOf(card: DirectionCard) =
@@ -130,5 +132,22 @@ class BuildRouteGroupsTest {
         val groups = buildRouteGroups(deps, stops, space.snapp.waygo.data.api.models.VehicleType.Rail, now)
 
         assertEquals(listOf("Ipswich station"), groups.map { it.directions.first().headsign })
+    }
+
+    @Test
+    fun `a cancelled departure stays on its card but doesn't decide the order`() {
+        val stops = listOf(stop("b1", 100.0, routeType = 3), stop("b2", 120.0, routeType = 3))
+        val deps = listOf(
+            // 412's next bus (1 min) is cancelled; its next running one is 15 min away
+            dep("c", "b1", 1, "City", type = "Bus", route = "412", routeId = "412-1", cancelled = true),
+            dep("r", "b1", 15, "City", type = "Bus", route = "412", routeId = "412-1"),
+            dep("x", "b2", 6, "Moggill", type = "Bus", route = "444", routeId = "444-1")
+        )
+
+        val groups = buildRouteGroups(deps, stops, null, now)
+
+        assertEquals(listOf("444", "412"), groups.map { it.directions.first().routeNumber })
+        // The cancelled one is still there to be shown as "cancelled"
+        assertEquals(listOf(1, 15), minutesOf(groups.last().directions.first()))
     }
 }

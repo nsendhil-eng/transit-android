@@ -165,7 +165,8 @@ fun RouteGroupCard(
                     Text(
                         // Include the other direction's next time so it's never hidden
                         "Swipe for ${displayHeadsign(other)}" +
-                            (other.departures.firstOrNull()?.let { " · " + shortCountdown(it, now) } ?: ""),
+                            ((other.departures.firstOrNull { !it.notRunningHere } ?: other.departures.firstOrNull())
+                                ?.let { " · " + shortCountdown(it, now) } ?: ""),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -290,13 +291,29 @@ private fun RouteBadge(card: DirectionCard, routeColor: Color, routeTextColor: C
 
 /** Big countdown for the next service, its live status, and the following two. */
 @Composable
-private fun NextDepartures(departures: List<Departure>, now: Long) {
+private fun NextDepartures(all: List<Departure>, now: Long) {
+    // Countdown is for the next service actually running; a cancelled one ahead of it is
+    // called out on its own line rather than silently dropped
+    val departures = all.filterNot { it.notRunningHere }
+    val cancelledAhead = all.firstOrNull()?.takeIf { it.notRunningHere }
+    if (departures.isEmpty()) {
+        Text("Cancelled", color = CancelRed, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+        return
+    }
     val next = departures.first()
     val secs = ((next.departureDate.time - now) / 1000).toInt()
     val fg = MaterialTheme.colorScheme.onSurface
     val isLive = next.isRealtime ?: (next.expectedDepartureUtc != null)
 
     Column(horizontalAlignment = Alignment.End) {
+        if (cancelledAhead != null) {
+            Text(
+                "${formatClock(cancelledAhead.departureDate)} " +
+                    if (cancelledAhead.isSkipped == true) "skips this stop" else "cancelled",
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                color = CancelRed
+            )
+        }
         Row(verticalAlignment = Alignment.Top) {
             val (big, unit) = countdownParts(secs, next.departureDate)
             Text(big, color = fg, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
@@ -340,6 +357,8 @@ private fun NextDepartures(departures: List<Departure>, now: Long) {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+private val CancelRed = Color(0xFFEF5350)
 
 /** "Now", "4 min" or "8:17 PM" for one-line hints. */
 private fun shortCountdown(d: Departure, now: Long): String {

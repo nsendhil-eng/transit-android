@@ -32,7 +32,8 @@ data class DirectionCard(
      * departure ranked down or hidden for being "uncatchable" just looks like it's missing.
      */
     fun nextIn(now: Long): Long =
-        departures.firstOrNull()?.let { (it.departureDate.time - now) / 1000 } ?: (Long.MAX_VALUE / 2)
+        (departures.firstOrNull { !it.notRunningHere } ?: departures.firstOrNull())
+            ?.let { (it.departureDate.time - now) / 1000 } ?: (Long.MAX_VALUE / 2)
 }
 
 /** A route with its directions as swipeable pages (trains: one destination per group). */

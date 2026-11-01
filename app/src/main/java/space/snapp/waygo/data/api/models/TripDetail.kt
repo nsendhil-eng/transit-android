@@ -19,7 +19,9 @@ data class TripStop(
     // Nullable: older API responses omit these
     val stopSequence: Int? = null,
     val isRealtime: Boolean? = null,
-    val delaySeconds: Int? = null
+    val delaySeconds: Int? = null,
+    // Skipped on this trip (e.g. a diversion)
+    val isSkipped: Boolean? = null
 ) {
     /** True when the time comes from GTFS-RT rather than the timetable. */
     val hasLiveTime: Boolean get() = isRealtime ?: (estimatedTime != null)
@@ -39,7 +41,8 @@ data class TripDetailInfo(
     val routeType: Int,
     val headsign: String,
     val directionId: Int,
-    val routeTextColor: String? = null
+    val routeTextColor: String? = null,
+    val isCancelled: Boolean? = null
 )
 
 data class TripVehicle(
@@ -77,7 +80,9 @@ data class NextTrip(
     val estimatedTime: String?,
     val departureUtc: String? = null,
     val isRealtime: Boolean? = null,
-    val delaySeconds: Int? = null
+    val delaySeconds: Int? = null,
+    // Trip cancelled, or it skips this stop
+    val isCancelled: Boolean? = null
 ) {
     val departureDate: Date? get() = departureUtc?.let { parseUtc(it) }
 }
