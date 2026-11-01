@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -32,6 +33,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Train
 import androidx.compose.material.icons.filled.Tram
@@ -148,10 +150,16 @@ fun TripDetailScreen(
     var fittedTripId by remember { mutableStateOf<String?>(null) }
     var fitBox by remember { mutableStateOf<BoundingBox?>(null) }
 
+    // A stop dot tapped on the map: the list scrolls to it once and briefly highlights it.
+    // Kept as a one-off event (stop + tap count), not state the list re-reads on refresh.
+    var stopTap by remember { mutableStateOf<Pair<String, Int>?>(null) }
+
     LaunchedEffect(tripDetail, userLat, userLon) {
         val map = mapRef.value ?: return@LaunchedEffect
         val detail = tripDetail ?: return@LaunchedEffect
-        rebuildTripMap(context, map, detail, routeColor.toArgbInt(), routeTextColor.toArgbInt(), userLat, userLon)
+        rebuildTripMap(context, map, detail, routeColor.toArgbInt(), routeTextColor.toArgbInt(), userLat, userLon) {
+            stopTap = it to ((stopTap?.second ?: 0) + 1)
+        }
         val box = focusBoundingBox(detail, userLat, userLon)
         fitBox = box
         if (fittedTripId != detail.tripInfo.tripId && box != null) {
@@ -211,7 +219,8 @@ fun TripDetailScreen(
                                 userLon = userLon,
                                 now = now,
                                 onSelectTrip = viewModel::switchTrip,
-                                alerts = alerts
+                                alerts = alerts,
+                                stopTap = stopTap
                             )
                         }
                     }
@@ -379,9 +388,11 @@ private fun TripSheetContent(
     userLon: Double?,
     now: Long,
     onSelectTrip: (String) -> Unit,
-    alerts: AlertsUi
+    alerts: AlertsUi,
+    stopTap: Pair<String, Int>? = null
 ) {
     var showEarlier by remember(detail.tripInfo.tripId) { mutableStateOf(false) }
+    val listState = rememberLazyListState()
     val stops = detail.stops
     val nearest = stops.firstOrNull { it.isNearest }
     // Only a fresh fix places the bus on the timeline; a stale one is mentioned, not trusted
@@ -390,7 +401,30 @@ private fun TripSheetContent(
 
     val items = remember(detail, showEarlier) { buildTimeline(stops, vehicle, showEarlier) }
 
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
+    // Map dot tapped: unfold earlier stops if needed, scroll there once, highlight briefly.
+    // Keyed on the tap only, so the 10 s refreshes never scroll the list back again.
+    var highlightedStopId by remember { mutableStateOf<String?>(null) }
+    val latestItems by rememberUpdatedState(items)
+    LaunchedEffect(stopTap) {
+        val id = stopTap?.first ?: return@LaunchedEffect
+        highlightedStopId = id
+        if (latestItems.none { it is TimelineItem.StopItem && it.stop.stopId == id }) showEarlier = true
+        // Give the unfolded list a moment to appear
+        var idx = -1
+        repeat(10) {
+            idx = latestItems.indexOfFirst { it is TimelineItem.StopItem && it.stop.stopId == id }
+            if (idx >= 0) return@repeat
+            delay(50)
+        }
+        if (idx >= 0) {
+            val headerItems = 2 + if (alerts.visible.isNotEmpty()) 1 else 0   // tiles, status, alerts
+            listState.animateScrollToItem(headerItems + idx)
+        }
+        delay(4_000)
+        highlightedStopId = null
+    }
+
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
         // Always present (placeholders until next-trips loads): inserting it later above the
         // stops makes LazyColumn keep the stops anchored and push the tiles out of view
         item(key = "tiles") {
@@ -443,7 +477,8 @@ private fun TripSheetContent(
                     routeColor = routeColor,
                     routeTextColor = routeTextColor,
                     walkMins = if (item.stop.isNearest) walkMinutes(userLat, userLon, item.stop) else null,
-                    now = now
+                    now = now,
+                    highlighted = item.stop.stopId == highlightedStopId
                 )
                 TimelineItem.VehicleBetween -> VehicleBetweenRow(vehicle, routeColor, routeTextColor)
             }
@@ -615,6 +650,9 @@ private fun LiveStatusLine(
         staleVehicle != null -> Icons.Default.History to
             "Bus last seen ${staleVehicle.ageSeconds?.let { formatAge(it) } ?: "a while ago"}"
         stops.any { it.hasLiveTime } -> null to "Live times · vehicle not yet tracking"
+        // Past its start time with no live data at all: it may be late, or not running
+        first != null && first.departureDate.time < now -> Icons.Default.Info to
+            "No live data for this bus · it may be late or not running"
         else -> null to "Scheduled times · no live tracking"
     }
     // Once the bus has passed you, its age/position no longer matter
@@ -684,7 +722,8 @@ private fun StopTimelineRow(
     routeColor: Color,
     routeTextColor: Color,
     walkMins: Int?,
-    now: Long
+    now: Long,
+    highlighted: Boolean = false
 ) {
     val passedColor = MaterialTheme.colorScheme.outline
     val lineColor = if (passed) passedColor else routeColor
@@ -696,7 +735,13 @@ private fun StopTimelineRow(
             .fillMaxWidth()
             .heightIn(min = 64.dp)
             .height(IntrinsicSize.Min)
-            .then(if (stop.isNearest) Modifier.background(routeColor.copy(alpha = 0.10f)) else Modifier)
+            .then(
+                when {
+                    highlighted -> Modifier.background(routeColor.copy(alpha = 0.22f))
+                    stop.isNearest -> Modifier.background(routeColor.copy(alpha = 0.10f))
+                    else -> Modifier
+                }
+            )
     ) {
         // Timeline gutter: line segments above/below plus the stop dot (or the vehicle)
         Box(modifier = Modifier.width(56.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
@@ -951,7 +996,8 @@ private fun rebuildTripMap(
     routeColorInt: Int,
     routeTextColorInt: Int,
     userLat: Double?,
-    userLon: Double?
+    userLon: Double?,
+    onStopTap: (String) -> Unit = {}
 ) {
     val dp = context.resources.displayMetrics.density
     map.overlays.clear()
@@ -990,7 +1036,10 @@ private fun rebuildTripMap(
         })
     }
 
-    // Stop markers
+    // Stop names beside the dots (drawn under the dots and the vehicle)
+    map.overlays.add(StopLabelsOverlay(stopLabels(detail), dp, topInsetPx = HeaderHeight.value * dp))
+
+    // Stop markers — tap one to jump to it in the list
     for (stop in detail.stops) {
         map.overlays.add(Marker(map).apply {
             position = GeoPoint(stop.lat, stop.lon)
@@ -998,6 +1047,7 @@ private fun rebuildTripMap(
             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
             title = stop.stopName
             setInfoWindow(null)
+            setOnMarkerClickListener { _, _ -> onStopTap(stop.stopId); true }
         })
     }
 
@@ -1023,6 +1073,36 @@ private fun rebuildTripMap(
     }
 
     map.invalidate()
+}
+
+/** Labels for every stop; your stop, the bus's next stop and the terminus always win space. */
+private fun stopLabels(detail: TripDetailResponse): List<StopLabel> {
+    val stops = detail.stops
+    val vehicle = detail.vehicle?.takeIf { it.isLive }
+    val nextStopSeq = vehicle?.currentStopSequence ?: stops.firstOrNull { it.isUpcoming }?.stopSequence
+    return stops.mapIndexed { i, stop ->
+        // Route direction at this stop from its neighbours, so the label sits beside the line
+        val prev = stops.getOrNull(i - 1) ?: stop
+        val next = stops.getOrNull(i + 1) ?: stop
+        val passed = stop.isPassed(vehicle)
+        val priority = when {
+            stop.isNearest -> 4
+            stop.stopSequence != null && stop.stopSequence == nextStopSeq && !passed -> 3
+            i == stops.lastIndex -> PRIORITY_KEY
+            passed -> 0
+            else -> 1
+        }
+        StopLabel(
+            stopId = stop.stopId,
+            text = mapStopName(stop.stopName),
+            point = GeoPoint(stop.lat, stop.lon),
+            priority = priority,
+            bold = stop.isNearest,
+            dimmed = passed && !stop.isNearest,
+            alongLat = next.lat - prev.lat,
+            alongLon = next.lon - prev.lon
+        )
+    }
 }
 
 private fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
