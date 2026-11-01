@@ -57,6 +57,8 @@ private const val PAN_SETTLE_MS = 1_500L
 private const val MAX_CALLOUT_STOPS = 30
 /** Refetch nearby stops only after moving this far (GPS updates every 10 s) */
 private const val REFETCH_STOPS_AFTER_M = 150.0
+/** Starting zoom, and where the re-centre button returns to */
+private const val DEFAULT_ZOOM = 16.5
 /** Drag handle strip at the top of the bottom panel */
 private val SheetHandleHeight = 20.dp
 /** Room left above the panel when dragged all the way up: status bar, search and alert buttons */
@@ -93,6 +95,14 @@ fun NearbyStopsMapView(
     var nearbyDeps by remember { mutableStateOf<List<Departure>>(emptyList()) }
     // The stop whose card was tapped once: highlighted on the map; a second tap opens it
     var focusedGroupId by remember { mutableStateOf<String?>(null) }
+    // Zoom before a paired card zoomed in, so it can be undone
+    val zoomBeforeFocus = remember { mutableStateOf<Double?>(null) }
+    fun restoreZoom(centre: GeoPoint? = null) {
+        val z = zoomBeforeFocus.value ?: return
+        zoomBeforeFocus.value = null
+        val map = mapRef.value ?: return
+        map.controller.animateTo(centre ?: map.mapCenter as GeoPoint, z, 500L)
+    }
     // When the map was last dragged; refreshes wait until it settles
     val lastPanMs = remember { longArrayOf(0L) }
     val lastStopsFetch = remember { mutableStateOf<GeoPoint?>(null) }
@@ -332,8 +342,10 @@ fun NearbyStopsMapView(
                             // pair, whose stops are often only ~40 m apart and would overlap
                             val centre = GeoPoint(card.groups.map { it.latitude }.average(), card.groups.map { it.longitude }.average())
                             val map = mapRef.value
-                            if (card.sides.size > 1 && map != null && map.zoomLevelDouble < PAIR_FOCUS_ZOOM)
+                            if (card.sides.size > 1 && map != null && map.zoomLevelDouble < PAIR_FOCUS_ZOOM) {
+                                if (zoomBeforeFocus.value == null) zoomBeforeFocus.value = map.zoomLevelDouble
                                 map.controller.animateTo(centre, PAIR_FOCUS_ZOOM, 600L)
+                            } else if (zoomBeforeFocus.value != null) restoreZoom(centre)
                             else map?.controller?.animateTo(centre)
                         }
                     },
@@ -354,7 +366,7 @@ fun NearbyStopsMapView(
                         setMultiTouchControls(true)
                         // Pinch to zoom; osmdroid's own −/+ buttons clash with the dark map
                         zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
-                        controller.setZoom(16.5)
+                        controller.setZoom(DEFAULT_ZOOM)
                         controller.setCenter(GeoPoint(userLat ?: BRISBANE_LAT, userLon ?: BRISBANE_LON))
                         overlays.add(youOverlay)
                         // Dragging the map stops following you (pinch-zoom keeps it)
@@ -373,7 +385,10 @@ fun NearbyStopsMapView(
                 SmallFloatingActionButton(
                     onClick = {
                         following = true
-                        youOverlay.position?.let { mapRef.value?.controller?.animateTo(it) }
+                        // Back to you at the normal zoom, whatever was focused or zoomed
+                        focusedGroupId = null
+                        zoomBeforeFocus.value = null
+                        youOverlay.position?.let { mapRef.value?.controller?.animateTo(it, DEFAULT_ZOOM, 600L) }
                     },
                     containerColor = ComposeColor(0xFF22272E),
                     contentColor = ComposeColor(0xFF4FB3FF),
@@ -393,7 +408,11 @@ fun NearbyStopsMapView(
     val selectedGroup = selectedGroupState.value
     if (selectedGroup != null) {
         ModalBottomSheet(
-            onDismissRequest = { selectedGroupState.value = null },
+            onDismissRequest = {
+                selectedGroupState.value = null
+                // Done with that stop: undo the focus zoom
+                if (zoomBeforeFocus.value != null) { focusedGroupId = null; restoreZoom() }
+            },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
         ) {
             StopGroupSheet(
