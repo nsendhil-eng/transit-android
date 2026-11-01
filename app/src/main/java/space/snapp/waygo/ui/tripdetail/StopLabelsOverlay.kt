@@ -39,7 +39,13 @@ class StopLabelsOverlay(
     private val labels: List<StopLabel>,
     density: Float,
     /** Height of UI floating over the top of the map (the header); no labels under it */
-    private val topInsetPx: Float = 0f
+    private val topInsetPx: Float = 0f,
+    /** Dot centre to label edge, dp: bigger for the home map's larger stop markers */
+    gapDp: Float = 9f,
+    /** Below this zoom only PRIORITY_KEY labels are drawn */
+    private val allLabelsZoom: Double = ALL_LABELS_ZOOM,
+    /** Radius of the stop markers, dp; when set, labels also keep off every marker */
+    dotRadiusDp: Float = 0f
 ) : Overlay() {
     private val dp = density
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -55,17 +61,28 @@ class StopLabelsOverlay(
     }
     private val regular = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
     private val bold = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-    private val gap = 9f * dp
+    private val gap = gapDp * dp
+    private val dotR = dotRadiusDp * dp
+    /** Another point labels keep off (your location dot) */
+    var avoid: GeoPoint? = null
     private val p = Point()
     private val q = Point()
 
     override fun draw(canvas: Canvas, mapView: MapView, shadow: Boolean) {
         if (shadow || labels.isEmpty()) return
         val proj = mapView.projection
-        val showAll = mapView.zoomLevelDouble >= ALL_LABELS_ZOOM
+        val showAll = mapView.zoomLevelDouble >= allLabelsZoom
         val placed = ArrayList<RectF>()
         val viewW = mapView.width.toFloat()
         val viewH = mapView.height.toFloat()
+        if (dotR > 0f) for (label in labels) {
+            proj.toPixels(label.point, p)
+            placed += RectF(p.x - dotR, p.y - dotR, p.x + dotR, p.y + dotR)
+        }
+        avoid?.let {
+            proj.toPixels(it, p)
+            placed += RectF(p.x - 12 * dp, p.y - 12 * dp, p.x + 12 * dp, p.y + 12 * dp)
+        }
 
         for (label in labels.sortedByDescending { it.priority }) {
             if (!showAll && label.priority < PRIORITY_KEY) continue

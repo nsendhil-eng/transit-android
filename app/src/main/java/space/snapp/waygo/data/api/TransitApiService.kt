@@ -31,7 +31,9 @@ interface TransitApiService {
     suspend fun departures(
         @Query("stops") stops: String,
         @Query("per_stop") perStop: Int? = null,
-        @Query("get_off_stop") getOffStop: String? = null
+        @Query("get_off_stop") getOffStop: String? = null,
+        // 1 = include each departure's heading (which way it leaves the stop)
+        @Query("with_heading") withHeading: Int? = null
     ): List<Departure>
 
     @GET("/api/stops-near-me")

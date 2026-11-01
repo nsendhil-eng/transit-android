@@ -75,6 +75,8 @@ fun SearchScreen(
     var savePromptClosed by rememberSaveable { mutableStateOf(false) }
     val savePromptExpanded = favorites.isEmpty() && !savePromptClosed
     var savePromptHeightPx by remember { mutableIntStateOf(0) }
+    // The map's mode cards along the bottom; the save prompt sits above them
+    var mapCardsHeightPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
     var inPlanMode by remember { mutableStateOf(false) }
     var selectedItinerary by remember { mutableStateOf<Itinerary?>(null) }
@@ -98,6 +100,7 @@ fun SearchScreen(
             userAccuracyM = userAccuracyM,
             // Keep the re-centre button above the save card while it's open
             bottomInset = with(density) { savePromptHeightPx.toDp() },
+            onCardsHeight = { mapCardsHeightPx = it },
             onAddStops = { stops -> stops.forEach { viewModel.addStop(it) } },
             onDepartureClick = { dep ->
                 onTripSelected(
@@ -413,7 +416,7 @@ fun SearchScreen(
                 onCollapse = { savePromptClosed = true },
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(12.dp)
+                    .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 12.dp + with(density) { mapCardsHeightPx.toDp() })
                     .onSizeChanged { savePromptHeightPx = if (savePromptExpanded) it.height else 0 }
             )
         }
