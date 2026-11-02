@@ -65,15 +65,16 @@ class BuildModeCardsTest {
     }
 
     @Test
-    fun `each route and direction once, soonest first, at most three rows`() {
+    fun `each route and direction once, soonest first, at most four at a lone stop`() {
         val card = buildModeCards(groups, listOf(
             dep("1951", "412", 0, 9),
             dep("1951", "412", 0, 1),
             dep("1951", "412", 1, 3),
             dep("1951", "444", 0, 6),
-            dep("1951", "425", 0, 12)
+            dep("1951", "425", 0, 12),
+            dep("1951", "430", 0, 15)
         ), userLat, userLon).single()
-        assertEquals(listOf("412|0", "412|1", "444|0"), card.departures.map { "${it.routeNumber}|${it.directionId}" })
+        assertEquals(listOf("412|0", "412|1", "444|0", "425|0"), card.departures.map { "${it.routeNumber}|${it.directionId}" })
     }
 
     // The stop across the road from Wesley stop 9, same name, ~40 m away
@@ -99,7 +100,7 @@ class BuildModeCardsTest {
     }
 
     @Test
-    fun `a lone stop keeps three rows and is not across the road`() {
+    fun `a lone stop shows all it has, up to four, and is not across the road`() {
         val card = buildModeCards(groups, listOf(
             dep("1951", "412", 0, 1), dep("1951", "444", 0, 2), dep("1951", "450", 0, 3)
         ), userLat, userLon).single()
@@ -123,6 +124,17 @@ class BuildModeCardsTest {
             dep("317571", "F1", 0, 3, type = "Ferry")         // no shape: nothing to draw
         ), userLat, userLon)
         assertEquals(listOf("S412", "S444"), pathDepartures(cards).map { it.second.shapeId })
+    }
+
+    @Test
+    fun `zoomed out, crowded stops thin out but card stops always stay`() {
+        // Wesley stop 9 and stop 10 are ~40 m apart across the road; Milton and Regatta are far off
+        val all = groupStops(listOf(wesley, wesleyOpposite, milton, regatta))
+        val miltonId = all.single { g -> g.stops.any { it.id == milton.id } }.id
+        val shown = declutterStops(all, keep = setOf(miltonId), userLat = userLat, userLon = userLon, metersApart = 80.0)
+            .flatMap { g -> g.stops.map { it.id } }
+        // Milton is kept regardless; stop 9 is nearer you than stop 10, which overlaps it and goes
+        assertEquals(setOf(milton.id, wesley.id, regatta.id), shown.toSet())
     }
 
     @Test

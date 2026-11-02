@@ -50,9 +50,14 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Debug builds only: pretend to be somewhere else, for testing a place without going there
+        //   adb shell am start -n space.snapp.waygo/.MainActivity --ef fake_lat -27.4658 --ef fake_lon 153.0195
+        val debuggable = applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
+        val fakeLocation = intent.takeIf { debuggable && it.hasExtra("fake_lat") && it.hasExtra("fake_lon") }
+            ?.let { it.getFloatExtra("fake_lat", 0f).toDouble() to it.getFloatExtra("fake_lon", 0f).toDouble() }
         setContent {
             WayGoTheme {
-                WayGoApp()
+                WayGoApp(fakeLocation)
             }
         }
     }
@@ -67,7 +72,10 @@ enum class Screen(val label: String, val icon: ImageVector) {
 @SuppressLint("MissingPermission")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WayGoApp() {
+fun WayGoApp(
+    /** Debug: a fixed location used instead of GPS */
+    fakeLocation: Pair<Double, Double>? = null
+) {
     val context = LocalContext.current
     var currentScreen by remember { mutableStateOf(Screen.Search) }
 
@@ -77,8 +85,8 @@ fun WayGoApp() {
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         )
     }
-    var userLat by remember { mutableStateOf<Double?>(null) }
-    var userLon by remember { mutableStateOf<Double?>(null) }
+    var userLat by remember { mutableStateOf(fakeLocation?.first) }
+    var userLon by remember { mutableStateOf(fakeLocation?.second) }
     var userAccuracy by remember { mutableStateOf<Float?>(null) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -91,7 +99,7 @@ fun WayGoApp() {
     // Request an immediate fix then keep updating every 10 s while the app is on screen
     val appVisible by AppVisibility.visible.collectAsState()
     DisposableEffect(hasLocationPermission, appVisible) {
-        if (!hasLocationPermission || !appVisible) return@DisposableEffect onDispose {}
+        if (!hasLocationPermission || !appVisible || fakeLocation != null) return@DisposableEffect onDispose {}
         val client = LocationServices.getFusedLocationProviderClient(context)
         // Immediate best-effort fix from cache
         client.lastLocation.addOnSuccessListener { loc ->

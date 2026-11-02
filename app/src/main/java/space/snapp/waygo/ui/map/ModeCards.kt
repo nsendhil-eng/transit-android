@@ -52,8 +52,10 @@ data class ModeCard(
 /** A service drops off its card this long after its live time (it has left) */
 const val DEPARTED_GRACE_S = 30
 
-/** Rows per card with one stop; with two sides, rows per side */
+/** Departures fetched per stop, and shown per stop in the panel list */
 const val MODE_CARD_ROWS = 3
+/** A card's departures: four at a lone stop (a busway hub is where choice matters), two per side of a road */
+const val LONE_SIDE_ROWS = 4
 const val SIDE_ROWS = 2
 
 /** Same-named stops of one mode within this distance are one place (opposite sides, bays) */
@@ -91,7 +93,7 @@ fun buildModeCards(
                 approxMeters(it.latitude, it.longitude, nearest.latitude, nearest.longitude) <= PAIR_RADIUS_M }
             .minByOrNull(::distance)
         val sideGroups = listOfNotNull(nearest, partner)
-        val rowsPerSide = if (sideGroups.size > 1) SIDE_ROWS else MODE_CARD_ROWS
+        val rowsPerSide = if (sideGroups.size > 1) SIDE_ROWS else LONE_SIDE_ROWS
         val sides = sideGroups.map { g ->
             CardSide(g, distance(g), ofMode
                 .filter { groupOfStop[it.stopId]?.id == g.id }
@@ -103,17 +105,39 @@ fun buildModeCards(
     }
 }
 
-/** Services per side of a card whose route is drawn on the map: the ones the card shows */
+/** Services per side of a card whose route is drawn on the map: the soonest, to keep the map calm */
 const val PATHS_PER_SIDE = 2
 
 /**
- * The services whose whole route is drawn on the home map, with their card: what each card
- * shows, one per route shape (412 and 444 still get a line each; two 412s don't).
+ * The services whose whole route is drawn on the home map, with their card: the soonest two
+ * per side, one per route shape (412 and 444 still get a line each; two 412s don't).
  */
 fun pathDepartures(cards: List<ModeCard>): List<Pair<ModeCard, Departure>> =
     cards.flatMap { card -> card.sides.flatMap { side -> side.departures.take(PATHS_PER_SIDE).map { card to it } } }
         .filter { it.second.shapeId != null }
         .distinctBy { it.second.shapeId }
+
+/**
+ * The stops to draw when zoomed out: [keep] first (the focused stop, the cards' stops), then the
+ * rest nearest-first, leaving out any stop within [metersApart] of one already drawn. In the
+ * city that stops a dozen dots piling up around a station; zoomed in, the caller shows all.
+ */
+fun declutterStops(
+    groups: List<StopGroup>,
+    keep: Set<String>,
+    userLat: Double?,
+    userLon: Double?,
+    metersApart: Double
+): List<StopGroup> {
+    fun distance(g: StopGroup) =
+        if (userLat != null && userLon != null) approxMeters(userLat, userLon, g.latitude, g.longitude)
+        else g.stops.firstOrNull()?.distanceMeters ?: 0.0
+    val kept = groups.filter { it.id in keep }.toMutableList()
+    for (g in groups.filter { it.id !in keep }.sortedBy(::distance)) {
+        if (kept.none { approxMeters(it.latitude, it.longitude, g.latitude, g.longitude) < metersApart }) kept += g
+    }
+    return kept
+}
 
 /** One nearby stop and its next departures, for the list in the expanded panel */
 data class NearbyStop(val group: StopGroup, val distanceM: Double, val departures: List<Departure>)

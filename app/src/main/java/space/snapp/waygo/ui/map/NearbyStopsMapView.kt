@@ -47,6 +47,13 @@ import space.snapp.waygo.data.api.models.Stop
 import space.snapp.waygo.data.api.models.TripLive
 import space.snapp.waygo.data.api.models.LiveTripVehicle
 import org.osmdroid.views.overlay.FolderOverlay
+import org.osmdroid.events.MapListener
+import org.osmdroid.events.ScrollEvent
+import org.osmdroid.events.ZoomEvent
+import org.osmdroid.util.TileSystem
+import kotlin.math.cos
+import kotlin.math.pow
+import kotlin.math.roundToInt
 import space.snapp.waygo.data.api.models.VehicleType
 import space.snapp.waygo.ui.components.icon
 import space.snapp.waygo.ui.departures.DeparturesScreen
@@ -70,6 +77,9 @@ private val SHEET_TOP_GAP = 140.dp
 private const val PAIR_FOCUS_ZOOM = 17.5
 /** Below this zoom only the mode-card stops are labelled */
 private const val ALL_STOP_LABELS_ZOOM = 15.5
+/** From this zoom every stop is drawn; below it, stops closer than STOP_GAP_DP on screen thin out */
+private const val ALL_STOPS_ZOOM = 17.5
+private const val STOP_GAP_DP = 28f
 /** Live vehicles on the cards' services: refresh interval, and fixes older than this are hidden */
 private const val VEHICLE_REFRESH_MS = 10_000L
 private const val VEHICLE_MAX_AGE_S = 600
@@ -122,6 +132,18 @@ fun NearbyStopsMapView(
     }
     val nearbyStops = remember(stopGroups, nearbyDeps, userLat, userLon, cardsTick) {
         buildNearbyStops(stopGroups, nearbyDeps, userLat, userLon)
+    }
+    // Zoomed out, stops that would sit on top of each other thin out (a dozen dots round a city
+    // station); the cards' stops and the focused one always stay. Zoom tracked to a quarter level.
+    var mapZoom by remember { mutableDoubleStateOf(DEFAULT_ZOOM) }
+    val shownStops = remember(stopGroups, modeCards, focusedGroupId, mapZoom, userLat, userLon) {
+        if (mapZoom >= ALL_STOPS_ZOOM) stopGroups
+        else {
+            val keep = modeCards.flatMap { c -> c.groups.map { it.id } }.toSet() + listOfNotNull(focusedGroupId)
+            val lat = userLat ?: BRISBANE_LAT
+            val metersPerPx = 40_075_016.686 * cos(Math.toRadians(lat)) / (TileSystem.getTileSize() * 2.0.pow(mapZoom))
+            declutterStops(stopGroups, keep, userLat, userLon, STOP_GAP_DP * context.resources.displayMetrics.density * metersPerPx)
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -253,7 +275,7 @@ fun NearbyStopsMapView(
     }
 
     // Rebuild overlays whenever stops or live trip data changes
-    LaunchedEffect(stopGroups, tripLiveData, focusedGroupId, modeCards.map { c -> c.sides.map { it.group.id to it.heading } }) {
+    LaunchedEffect(shownStops, tripLiveData, focusedGroupId, modeCards.map { c -> c.sides.map { it.group.id to it.heading } }) {
         val map = mapRef.value ?: return@LaunchedEffect
         val dp = context.resources.displayMetrics.density
         map.overlays.clear()
@@ -332,7 +354,7 @@ fun NearbyStopsMapView(
         val focusedHeadings: Map<String, Int?> = focusedCard?.sides?.associate { it.group.id to it.heading }
             ?: listOfNotNull(focusedGroupId).associateWith { null }
         map.overlays.add(StopLabelsOverlay(
-            stopGroups.filter { it.id !in farSides }.map { g ->
+            shownStops.filter { it.id !in farSides }.map { g ->
                 StopLabel(
                     stopId = g.id,
                     text = mapStopName(g.name),
@@ -352,7 +374,7 @@ fun NearbyStopsMapView(
         ).apply { avoid = youOverlay.position })
 
         // Stop markers on top; the focused one bigger with a ring
-        for (group in stopGroups) {
+        for (group in shownStops) {
             val marker = Marker(map).apply {
                 position = GeoPoint(group.latitude, group.longitude)
                 icon = createStopIcon(context, group, focused = group.id in focusedHeadings,
@@ -445,6 +467,14 @@ fun NearbyStopsMapView(
                         controller.setCenter(GeoPoint(userLat ?: BRISBANE_LAT, userLon ?: BRISBANE_LON))
                         overlays.add(youOverlay)
                         // Dragging the map stops following you (pinch-zoom keeps it)
+                        addMapListener(object : MapListener {
+                            override fun onScroll(event: ScrollEvent?) = false
+                            override fun onZoom(event: ZoomEvent?): Boolean {
+                                val z = (zoomLevelDouble * 4).roundToInt() / 4.0
+                                if (z != mapZoom) mapZoom = z
+                                return false
+                            }
+                        })
                         setOnTouchListener { _, ev ->
                             if (ev.actionMasked == MotionEvent.ACTION_MOVE) {
                                 lastPanMs[0] = System.currentTimeMillis()

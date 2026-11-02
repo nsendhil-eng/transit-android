@@ -168,10 +168,12 @@ private fun CompactCard(card: ModeCard, focused: Boolean, now: Long, modifier: M
                     }
                 }
             } else {
-                // One line per side of the road
-                for (side in card.sides) {
+                // One line per side of the road; a lone stop (a busway hub) fills both lines
+                val lines = if (card.sides.size == 1) card.departures.take(2 * COMPACT_PER_SIDE).chunked(COMPACT_PER_SIDE)
+                    else card.sides.map { it.departures.take(COMPACT_PER_SIDE) }
+                for (line in lines) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
-                        side.departures.take(COMPACT_PER_SIDE).forEachIndexed { i, dep ->
+                        line.forEachIndexed { i, dep ->
                             if (i > 0) Spacer(Modifier.width(10.dp))
                             RoutePill(dep)
                             Spacer(Modifier.width(3.dp))

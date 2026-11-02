@@ -136,10 +136,21 @@ class StopLabelsOverlay(
  * "Roma Street busway, platform 2" -> "Roma Street busway". The full name is in the list below.
  */
 fun mapStopName(name: String): String {
+    // City stops numbered mid-name: "Wickham Terrace Stop 132 near Albert St" -> "Wickham Tce near Albert St"
+    Regex("""^(.+?)\s+Stop\s+\w+\s+near\s+(.+)$""", RegexOption.IGNORE_CASE).find(name)?.let { m ->
+        return "${abbreviateStreet(m.groupValues[1])} near ${m.groupValues[2]}"
+    }
     val core = name.substringAfter(" at ", name)
     return core
         .replace(Regex(""",\s*(stop|platform|zone)\b.*$""", RegexOption.IGNORE_CASE), "")
         .replace(Regex("""\s+(stop|platform)\s+[\w/]+$""", RegexOption.IGNORE_CASE), "")
         .trim()
         .ifEmpty { name }
+}
+
+/** "Wickham Terrace" -> "Wickham Tce": the street type at the end, as on street signs */
+private fun abbreviateStreet(street: String): String {
+    val types = mapOf("Street" to "St", "Terrace" to "Tce", "Road" to "Rd", "Avenue" to "Ave", "Parade" to "Pde", "Drive" to "Dr")
+    val last = street.substringAfterLast(' ')
+    return types[last]?.let { street.dropLast(last.length) + it } ?: street
 }
