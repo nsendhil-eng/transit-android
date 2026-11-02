@@ -1,5 +1,6 @@
 package space.snapp.waygo.ui.departures
 
+import space.snapp.waygo.data.pollWhileVisible
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
@@ -37,12 +38,7 @@ class DeparturesViewModel : ViewModel() {
         currentGetOffStopId = getOffStopId
         _isLoading.value = true   // show spinner immediately, before coroutine fires
         refreshJob?.cancel()
-        refreshJob = viewModelScope.launch {
-            while (true) {
-                fetch()
-                delay(10_000)
-            }
-        }
+        refreshJob = viewModelScope.launch { pollWhileVisible(10_000) { fetch() } }
     }
 
     fun stopAutoRefresh() { refreshJob?.cancel() }

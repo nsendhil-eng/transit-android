@@ -1,5 +1,6 @@
 package space.snapp.waygo.ui.map
 
+import space.snapp.waygo.data.pollWhileVisible
 import android.graphics.Bitmap
 import android.graphics.Canvas as AndroidCanvas
 import android.graphics.Color as AndroidColor
@@ -174,10 +175,9 @@ fun NearbyStopsMapView(
             return@LaunchedEffect
         }
         val stopIds = group.stops.joinToString(",") { it.id }
-        while (true) {
+        pollWhileVisible(STOP_LIVE_REFRESH_MS) {
             runCatching { api.stopLive(stopIds) }
                 .onSuccess { tripLiveData = it.trips }
-            delay(STOP_LIVE_REFRESH_MS)
         }
     }
 

@@ -1,5 +1,6 @@
 package space.snapp.waygo.ui.alerts
 
+import space.snapp.waygo.data.pollWhileVisible
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -66,7 +67,7 @@ fun rememberServiceAlerts(routeIds: Collection<String>, stopIds: Collection<Stri
     LaunchedEffect(routeKey, stopKey) {
         if (routeKey.isEmpty() && stopKey.isEmpty()) { alerts = emptyList(); return@LaunchedEffect }
         val api = TransitApiService.instance
-        while (true) {
+        pollWhileVisible(ALERTS_REFRESH_MS) {
             try {
                 alerts = api.alerts(routeKey.ifEmpty { null }, stopKey.ifEmpty { null }).alerts
             } catch (e: CancellationException) {
@@ -74,7 +75,6 @@ fun rememberServiceAlerts(routeIds: Collection<String>, stopIds: Collection<Stri
             } catch (_: Exception) {
                 // Alerts are supplementary: keep what we had
             }
-            delay(ALERTS_REFRESH_MS)
         }
     }
 

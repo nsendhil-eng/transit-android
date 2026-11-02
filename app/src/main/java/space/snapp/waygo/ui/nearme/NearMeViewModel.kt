@@ -1,5 +1,6 @@
 package space.snapp.waygo.ui.nearme
 
+import space.snapp.waygo.data.pollWhileVisible
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
@@ -79,12 +80,7 @@ class NearMeViewModel : ViewModel() {
 
     private fun startDepartureRefresh() {
         refreshJob?.cancel()
-        refreshJob = viewModelScope.launch {
-            while (true) {
-                fetchDepartures()
-                delay(DEPARTURE_REFRESH_MS)
-            }
-        }
+        refreshJob = viewModelScope.launch { pollWhileVisible(DEPARTURE_REFRESH_MS) { fetchDepartures() } }
     }
 
     private suspend fun fetchDepartures() {

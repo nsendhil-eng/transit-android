@@ -1,5 +1,6 @@
 package space.snapp.waygo.ui.alerts
 
+import space.snapp.waygo.data.pollWhileVisible
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
@@ -44,7 +45,7 @@ class NetworkAlertsViewModel : ViewModel() {
         lon = newLon
         job?.cancel()
         job = viewModelScope.launch {
-            while (true) {
+            pollWhileVisible(REFRESH_MS) {
                 try {
                     _alerts.value = api.allAlerts(lat, lon).alerts
                 } catch (e: CancellationException) {
@@ -52,7 +53,6 @@ class NetworkAlertsViewModel : ViewModel() {
                 } catch (_: Exception) {
                     // keep the last list
                 }
-                delay(REFRESH_MS)
             }
         }
     }

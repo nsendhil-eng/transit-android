@@ -1,5 +1,6 @@
 package space.snapp.waygo
 
+import space.snapp.waygo.data.AppVisibility
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
@@ -87,9 +88,10 @@ fun WayGoApp() {
                 perms[Manifest.permission.ACCESS_COARSE_LOCATION] == true
     }
 
-    // Request an immediate fix then keep updating every 10 s while the app is open
-    DisposableEffect(hasLocationPermission) {
-        if (!hasLocationPermission) return@DisposableEffect onDispose {}
+    // Request an immediate fix then keep updating every 10 s while the app is on screen
+    val appVisible by AppVisibility.visible.collectAsState()
+    DisposableEffect(hasLocationPermission, appVisible) {
+        if (!hasLocationPermission || !appVisible) return@DisposableEffect onDispose {}
         val client = LocationServices.getFusedLocationProviderClient(context)
         // Immediate best-effort fix from cache
         client.lastLocation.addOnSuccessListener { loc ->

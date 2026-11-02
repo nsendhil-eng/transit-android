@@ -1,5 +1,6 @@
 package space.snapp.waygo.ui.tripdetail
 
+import space.snapp.waygo.data.pollWhileVisible
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.*
@@ -91,8 +92,8 @@ class TripDetailViewModel : ViewModel() {
     private fun startRefresh() {
         refreshJob?.cancel()
         refreshJob = viewModelScope.launch {
-            while (true) {
-                val params = loadParams ?: break
+            pollWhileVisible(10_000) {
+                val params = loadParams ?: return@pollWhileVisible
                 try {
                     if (_tripDetail.value == null) _isLoading.value = true
                     val detail = api.tripStops(
@@ -127,7 +128,6 @@ class TripDetailViewModel : ViewModel() {
                 } finally {
                     _isLoading.value = false
                 }
-                delay(10_000)
             }
         }
     }

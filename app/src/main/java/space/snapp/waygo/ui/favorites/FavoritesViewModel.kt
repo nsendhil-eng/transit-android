@@ -1,5 +1,6 @@
 package space.snapp.waygo.ui.favorites
 
+import space.snapp.waygo.data.pollWhileVisible
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -51,12 +52,7 @@ class FavoritesViewModel(private val repo: FavoritesRepository) : ViewModel() {
 
     fun startDeparturePolling() {
         pollingJob?.cancel()
-        pollingJob = viewModelScope.launch {
-            while (true) {
-                fetchAllDepartures()
-                delay(10_000)
-            }
-        }
+        pollingJob = viewModelScope.launch { pollWhileVisible(10_000) { fetchAllDepartures() } }
     }
 
     fun stopDeparturePolling() { pollingJob?.cancel() }
