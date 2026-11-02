@@ -28,7 +28,9 @@ data class Departure(
     // This stop is skipped on this trip (e.g. a diversion)
     val isSkipped: Boolean? = null,
     // Which way it leaves the stop, degrees from north; only with with_heading=1, null at a trip's last stop
-    val heading: Int? = null
+    val heading: Int? = null,
+    // The trip's shape, for /api/paths-ahead
+    val shapeId: String? = null
 ) {
     /** Not running from this stop: the trip is cancelled, or skips it. */
     val notRunningHere: Boolean get() = isCancelled == true || isSkipped == true

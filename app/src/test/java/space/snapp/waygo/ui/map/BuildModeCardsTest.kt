@@ -114,6 +114,18 @@ class BuildModeCardsTest {
     }
 
     @Test
+    fun `routes drawn are the services the cards show, one line per shape`() {
+        val cards = buildModeCards(groups, listOf(
+            dep("1951", "412", 0, 2).copy(shapeId = "S412"),
+            dep("1951", "412", 0, 9).copy(shapeId = "S412"),   // same line again: not drawn twice
+            dep("1951", "444", 0, 4).copy(shapeId = "S444"),
+            dep("1951", "450", 0, 6).copy(shapeId = "S450"),   // third row: the card doesn't show it
+            dep("317571", "F1", 0, 3, type = "Ferry")         // no shape: nothing to draw
+        ), userLat, userLon)
+        assertEquals(listOf("S412", "S444"), pathDepartures(cards).map { it.second.shapeId })
+    }
+
+    @Test
     fun `trains are labelled by destination, buses by route number`() {
         val train = dep("600284", "IPCA", 0, 5, type = "Train").copy(headsign = "Springfield Central station")
         assertEquals("Springfield Central", train.pillLabel)

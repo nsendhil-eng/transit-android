@@ -103,6 +103,18 @@ fun buildModeCards(
     }
 }
 
+/** Services per side of a card whose route is drawn on the map: the ones the card shows */
+const val PATHS_PER_SIDE = 2
+
+/**
+ * The services whose whole route is drawn on the home map, with their card: what each card
+ * shows, one per route shape (412 and 444 still get a line each; two 412s don't).
+ */
+fun pathDepartures(cards: List<ModeCard>): List<Pair<ModeCard, Departure>> =
+    cards.flatMap { card -> card.sides.flatMap { side -> side.departures.take(PATHS_PER_SIDE).map { card to it } } }
+        .filter { it.second.shapeId != null }
+        .distinctBy { it.second.shapeId }
+
 /** One nearby stop and its next departures, for the list in the expanded panel */
 data class NearbyStop(val group: StopGroup, val distanceM: Double, val departures: List<Departure>)
 

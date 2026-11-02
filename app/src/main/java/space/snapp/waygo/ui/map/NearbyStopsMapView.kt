@@ -45,6 +45,8 @@ import space.snapp.waygo.data.api.TransitApiService
 import space.snapp.waygo.data.api.models.Departure
 import space.snapp.waygo.data.api.models.Stop
 import space.snapp.waygo.data.api.models.TripLive
+import space.snapp.waygo.data.api.models.LiveTripVehicle
+import org.osmdroid.views.overlay.FolderOverlay
 import space.snapp.waygo.data.api.models.VehicleType
 import space.snapp.waygo.ui.components.icon
 import space.snapp.waygo.ui.departures.DeparturesScreen
@@ -68,6 +70,9 @@ private val SHEET_TOP_GAP = 140.dp
 private const val PAIR_FOCUS_ZOOM = 17.5
 /** Below this zoom only the mode-card stops are labelled */
 private const val ALL_STOP_LABELS_ZOOM = 15.5
+/** Live vehicles on the cards' services: refresh interval, and fixes older than this are hidden */
+private const val VEHICLE_REFRESH_MS = 10_000L
+private const val VEHICLE_MAX_AGE_S = 600
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -167,6 +172,72 @@ fun NearbyStopsMapView(
         }
     }
 
+    // The whole route of each card service. Shapes depend only on the timetable, so each is
+    // fetched once (shapeId -> points; empty when the API had none) and kept for the session.
+    val routePaths = remember { RoutePathsOverlay(context.resources.displayMetrics.density) }
+    val shapeCache = remember { mutableStateMapOf<String, List<GeoPoint>>() }
+    val drawn = remember(modeCards) { pathDepartures(modeCards) }
+    val missingShapes = drawn.mapNotNull { it.second.shapeId }.filter { it !in shapeCache }.toSet()
+    LaunchedEffect(missingShapes) {
+        if (missingShapes.isEmpty()) return@LaunchedEffect
+        runCatching { api.shapes(missingShapes.joinToString(",")) }
+            .onSuccess { r ->
+                for (id in missingShapes) shapeCache[id] = r.shapes[id].orEmpty().map { GeoPoint(it[0], it[1]) }
+            }
+    }
+    LaunchedEffect(drawn, shapeCache.size, focusedGroupId) {
+        routePaths.paths = drawn.mapNotNull { (card, dep) ->
+            val points = shapeCache[dep.shapeId]?.takeIf { it.size >= 2 } ?: return@mapNotNull null
+            RoutePath(points, dep.routeColorInt ?: dep.mode.pinColorInt(), dimmed = focusedGroupId != null && card.group.id != focusedGroupId)
+        }
+        mapRef.value?.invalidate()
+    }
+
+    // The live vehicles on those services, refreshed while the app is on screen. Tapping one
+    // opens its trip.
+    val vehicleLayer = remember { FolderOverlay() }
+    var liveVehicles by remember { mutableStateOf<List<LiveTripVehicle>>(emptyList()) }
+    val drawnTripIds = remember(drawn) { drawn.map { it.second.tripId }.distinct() }
+    LaunchedEffect(drawnTripIds) {
+        if (drawnTripIds.isEmpty()) { liveVehicles = emptyList(); return@LaunchedEffect }
+        pollWhileVisible(VEHICLE_REFRESH_MS) {
+            runCatching { api.tripVehicles(drawnTripIds.joinToString(",")) }
+                .onSuccess { liveVehicles = it.vehicles }
+        }
+    }
+    LaunchedEffect(liveVehicles, drawn, focusedGroupId) {
+        val map = mapRef.value ?: return@LaunchedEffect
+        vehicleLayer.items.clear()
+        for (v in liveVehicles) {
+            // A fix this old is a vehicle parked before its trip, not on its way
+            if ((v.ageSeconds ?: 0) > VEHICLE_MAX_AGE_S) continue
+            val (card, dep) = drawn.find { it.second.tripId == v.tripId } ?: continue
+            val color = dep.routeColorInt ?: dep.mode.pinColorInt()
+            val marker = Marker(map).apply {
+                position = GeoPoint(v.lat, v.lon)
+                icon = createVehicleMarkerIcon(
+                    context,
+                    // Rail short names are internal codes: arrow badge only
+                    label = if (dep.mode == VehicleType.Rail) "" else dep.routeNumber,
+                    routeColor = color,
+                    routeTextColor = dep.routeTextColorInt
+                        ?: if (androidx.core.graphics.ColorUtils.calculateLuminance(color) > 0.5) AndroidColor.BLACK else AndroidColor.WHITE,
+                    heading = if (v.headingKnown && !v.isStale) v.heading.toFloat() else null
+                )
+                alpha = when {
+                    focusedGroupId != null && card.group.id != focusedGroupId -> 0.35f
+                    v.isStale -> 0.45f
+                    else -> 1f
+                }
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                setInfoWindow(null)
+                setOnMarkerClickListener { _, _ -> onDepartureClick?.invoke(dep); true }
+            }
+            vehicleLayer.add(marker)
+        }
+        map.invalidate()
+    }
+
     // Poll stop-live every 5 s while a stop group is selected; cancel + clear when dismissed
     LaunchedEffect(selectedGroupState.value) {
         val group = selectedGroupState.value
@@ -245,6 +316,10 @@ fun NearbyStopsMapView(
                 map.overlays.add(marker)
             }
         }
+
+        // Where the cards' next services go, and the vehicles on them, under you and the stops
+        map.overlays.add(routePaths)
+        map.overlays.add(vehicleLayer)
 
         // You, under the stops so they stay tappable
         map.overlays.add(youOverlay)

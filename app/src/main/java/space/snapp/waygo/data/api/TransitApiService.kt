@@ -13,9 +13,11 @@ import space.snapp.waygo.data.api.models.PlanDelayResponse
 import space.snapp.waygo.data.api.models.PlanResponse
 import space.snapp.waygo.data.api.models.RouteShape
 import space.snapp.waygo.data.api.models.SearchResponse
+import space.snapp.waygo.data.api.models.ShapesResponse
 import space.snapp.waygo.data.api.models.Stop
 import space.snapp.waygo.data.api.models.StopLiveResponse
 import space.snapp.waygo.data.api.models.TripDetailResponse
+import space.snapp.waygo.data.api.models.TripVehiclesResponse
 import space.snapp.waygo.data.api.models.VehiclePosition
 
 interface TransitApiService {
@@ -35,6 +37,14 @@ interface TransitApiService {
         // 1 = include each departure's heading (which way it leaves the stop)
         @Query("with_heading") withHeading: Int? = null
     ): List<Departure>
+
+    /** Whole route shapes, simplified: `ids` is "shapeId,shapeId" */
+    @GET("/api/shapes")
+    suspend fun shapes(@Query("ids") ids: String): ShapesResponse
+
+    /** Live vehicles on the given trips ("T1,T2"); trips with none reporting are left out */
+    @GET("/api/trip-vehicles")
+    suspend fun tripVehicles(@Query("trip_ids") tripIds: String): TripVehiclesResponse
 
     @GET("/api/stops-near-me")
     suspend fun stopsNearMe(
