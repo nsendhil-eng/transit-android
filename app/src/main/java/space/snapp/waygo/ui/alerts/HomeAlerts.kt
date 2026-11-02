@@ -136,6 +136,9 @@ private fun BannerContent(alert: ServiceAlert, moreCount: Int, onClose: () -> Un
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            alert.stationsSummary?.let {
+                Text(it, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             if (moreCount > 0) {
                 Text(
                     "Tap to see all $moreCount other alerts",
@@ -219,6 +222,11 @@ private fun AlertCard(alert: ServiceAlert, expanded: Boolean, onToggle: () -> Un
                 Column(Modifier.weight(1f)) {
                     Text(alert.header, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold))
                     Text(timingLabel(alert), style = MaterialTheme.typography.labelMedium, color = accent)
+                    // Collapsed only: expanded, the details list every station
+                    if (!expanded) alert.stationsSummary?.let {
+                        Text(it, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 2.dp))
+                    }
                     if (alert.distanceM != null) {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
                             Icon(Icons.Default.Place, null, modifier = Modifier.size(13.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)

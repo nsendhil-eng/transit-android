@@ -24,9 +24,18 @@ data class ServiceAlert(
     val distanceM: Int? = null,
     val nearestStopName: String? = null,
     val routeCodes: List<String> = emptyList(),
-    val routeCount: Int? = null
+    val routeCount: Int? = null,
+    /** Rail closures: the stations it covers, in line order ("Ipswich", "Thomas Street", …), when known */
+    val affectedStations: List<String>? = null
 ) {
     val isUpcoming: Boolean get() = status == "upcoming"
+
+    /** "Stations: Ipswich, Thomas Street +5 more", or null; short enough for one line */
+    val stationsSummary: String?
+        get() = affectedStations?.takeIf { it.isNotEmpty() }?.let { s ->
+            if (s.size <= 2) "Stations: " + s.joinToString(", ")
+            else "Stations: " + s.take(2).joinToString(", ") + " +${s.size - 2} more"
+        }
     val fromDate: Date? get() = parseIsoUtc(activeFrom)
     val untilDate: Date? get() = parseIsoUtc(activeUntil)
 

@@ -169,6 +169,12 @@ internal fun AlertDetails(alert: ServiceAlert, onDismiss: (() -> Unit)?) {
         modifier = Modifier.padding(start = 42.dp, end = 12.dp, top = 4.dp, bottom = 10.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
+        alert.affectedStations?.takeIf { it.isNotEmpty() }?.let { stations ->
+            Text(
+                "Affected stations: " + stations.joinToString(", "),
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+            )
+        }
         if (alert.description.isNotBlank()) {
             Text(alert.description, style = MaterialTheme.typography.bodyMedium)
         }
