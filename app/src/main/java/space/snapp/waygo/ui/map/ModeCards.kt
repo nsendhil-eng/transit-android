@@ -135,9 +135,12 @@ val Departure.mode: VehicleType
         else -> VehicleType.Bus
     }
 
-/** Label for the route pill: the route number, except rail, whose short names are internal codes */
+/**
+ * Label for the route pill: the route number, except rail, whose short names are internal
+ * codes ("IPCA"), so where the train goes: "Springfield Central"
+ */
 val Departure.pillLabel: String
-    get() = if (mode == VehicleType.Rail) "Train" else routeNumber
+    get() = if (mode == VehicleType.Rail) headsign.removeSuffix(" station").removeSuffix(" Station") else routeNumber
 
 /** Late enough to colour amber */
 const val LATE_S = 120

@@ -114,6 +114,13 @@ class BuildModeCardsTest {
     }
 
     @Test
+    fun `trains are labelled by destination, buses by route number`() {
+        val train = dep("600284", "IPCA", 0, 5, type = "Train").copy(headsign = "Springfield Central station")
+        assertEquals("Springfield Central", train.pillLabel)
+        assertEquals("412", dep("1951", "412", 0, 4).pillLabel)
+    }
+
+    @Test
     fun `time labels never repeat the delay`() {
         val soon = dep("1951", "412", 0, 6).copy(isRealtime = true, delaySeconds = 300)
         assertEquals("6 min", departureTimeLabel(soon))

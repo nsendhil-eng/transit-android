@@ -9,7 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Navigation
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -152,17 +152,34 @@ private fun CompactCard(card: ModeCard, focused: Boolean, now: Long, modifier: M
                 else Text(distanceLabel(card.distanceM), fontSize = 11.sp, color = Muted)
             }
             Spacer(Modifier.height(4.dp))
-            // One line per side of the road
-            for (side in card.sides) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
-                    side.departures.take(COMPACT_PER_SIDE).forEachIndexed { i, dep ->
-                        if (i > 0) Spacer(Modifier.width(10.dp))
-                        RoutePill(dep)
-                        Spacer(Modifier.width(3.dp))
-                        Arrow(dep.heading, 11.dp)
-                        Spacer(Modifier.width(3.dp))
+            if (card.mode == VehicleType.Rail) {
+                // Trains are labelled by destination, too long to pair up: one per line
+                for (dep in card.departures.take(COMPACT_PER_SIDE)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+                        // Pill and arrow take what the time leaves, so the name only shortens when it must
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            RoutePill(dep, Modifier.weight(1f, fill = false))
+                            Spacer(Modifier.width(4.dp))
+                            Arrow(dep.heading, 13.dp)
+                        }
+                        Spacer(Modifier.width(6.dp))
                         Text(departureTimeLabel(dep, now), fontSize = 12.sp, fontWeight = FontWeight.Bold,
                             color = dep.timeColor, maxLines = 1)
+                    }
+                }
+            } else {
+                // One line per side of the road
+                for (side in card.sides) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+                        side.departures.take(COMPACT_PER_SIDE).forEachIndexed { i, dep ->
+                            if (i > 0) Spacer(Modifier.width(10.dp))
+                            RoutePill(dep)
+                            Spacer(Modifier.width(3.dp))
+                            Arrow(dep.heading, 13.dp)
+                            Spacer(Modifier.width(3.dp))
+                            Text(departureTimeLabel(dep, now), fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                color = dep.timeColor, maxLines = 1)
+                        }
                     }
                 }
             }
@@ -194,37 +211,47 @@ private fun StopListItem(stop: NearbyStop, now: Long, onTap: () -> Unit) {
 @Composable
 private fun DepartureRow(dep: Departure, now: Long) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
-        RoutePill(dep)
-        Spacer(Modifier.width(5.dp))
-        Arrow(dep.heading, 13.dp)
-        Spacer(Modifier.width(4.dp))
-        Text(dep.headsign, fontSize = 12.sp, color = DestText, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        // A train's pill already says where it goes
+        if (dep.mode == VehicleType.Rail) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                RoutePill(dep, Modifier.weight(1f, fill = false))
+                Spacer(Modifier.width(5.dp))
+                Arrow(dep.heading, 13.dp)
+            }
+        } else {
+            RoutePill(dep)
+            Spacer(Modifier.width(5.dp))
+            Arrow(dep.heading, 13.dp)
+            Spacer(Modifier.width(4.dp))
+            Text(dep.headsign, fontSize = 12.sp, color = DestText, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        }
         Spacer(Modifier.width(6.dp))
         Text(departureTimeLabel(dep, now), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = dep.timeColor)
     }
 }
 
-/** Which way the service leaves the stop; blank space when unknown so rows line up */
+/** Which way the service leaves the stop, as a compass arrow; blank space when unknown so rows line up */
 @Composable
 private fun Arrow(heading: Int?, size: androidx.compose.ui.unit.Dp) {
     Box(Modifier.size(size + 1.dp), contentAlignment = Alignment.Center) {
         heading?.let {
-            Icon(Icons.Default.Navigation, null, tint = DestText, modifier = Modifier.size(size).rotate(it.toFloat()))
+            Icon(Icons.Default.ArrowUpward, null, tint = Color.White, modifier = Modifier.size(size).rotate(it.toFloat()))
         }
     }
 }
 
 @Composable
-private fun RoutePill(dep: Departure) {
+private fun RoutePill(dep: Departure, modifier: Modifier = Modifier) {
     val bg = dep.routeColorInt?.let { Color(it) } ?: Color(0xFF555555)
     val fg = dep.routeTextColorInt?.let { Color(it) } ?: Color.White
-    Surface(shape = RoundedCornerShape(5.dp), color = bg) {
+    Surface(shape = RoundedCornerShape(5.dp), color = bg, modifier = modifier) {
         Text(
             dep.pillLabel,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             color = fg,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp).widthIn(min = 18.dp)
         )
     }
