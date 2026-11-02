@@ -82,7 +82,7 @@ fun buildModeCards(
         if (userLat != null && userLon != null) approxMeters(userLat, userLon, g.latitude, g.longitude)
         else g.stops.firstOrNull()?.distanceMeters ?: 0.0
 
-    val running = departures.filter { !it.notRunningHere && it.liveSeconds > -DEPARTED_GRACE_S && groupOfStop[it.stopId] != null }
+    val running = departures.filter { it.boardable && groupOfStop[it.stopId] != null }
     return MODE_ORDER.mapNotNull { mode ->
         val ofMode = running.filter { it.mode == mode }
         val serving = ofMode.map { groupOfStop.getValue(it.stopId) }.distinctBy { it.id }
@@ -139,6 +139,13 @@ fun declutterStops(
     return kept
 }
 
+/**
+ * Worth showing as something to catch: running from this stop, not yet gone, and not ending
+ * here (a train terminating at Roma Street can't be boarded there)
+ */
+val Departure.boardable: Boolean
+    get() = !notRunningHere && liveSeconds > -DEPARTED_GRACE_S && isLastStop != true
+
 /** One nearby stop and its next departures, for the list in the expanded panel */
 data class NearbyStop(val group: StopGroup, val distanceM: Double, val departures: List<Departure>)
 
@@ -151,7 +158,7 @@ fun buildNearbyStops(
 ): List<NearbyStop> {
     val groupOfStop = groups.flatMap { g -> g.stops.map { it.id to g.id } }.toMap()
     val byGroup = departures
-        .filter { !it.notRunningHere && it.liveSeconds > -DEPARTED_GRACE_S }
+        .filter { it.boardable }
         .groupBy { groupOfStop[it.stopId] }
     return groups.map { g ->
         val d = if (userLat != null && userLon != null) approxMeters(userLat, userLon, g.latitude, g.longitude)

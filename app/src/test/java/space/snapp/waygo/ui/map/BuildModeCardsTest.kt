@@ -110,6 +110,15 @@ class BuildModeCardsTest {
     }
 
     @Test
+    fun `a service ending at the stop is not shown as one to catch`() {
+        val card = buildModeCards(groups, listOf(
+            dep("600284", "SHBR", 0, 0, type = "Train").copy(isLastStop = true),   // terminating here
+            dep("600284", "IPNA", 0, 4, type = "Train")
+        ), userLat, userLon).single()
+        assertEquals(listOf("IPNA"), card.departures.map { it.routeNumber })
+    }
+
+    @Test
     fun `nothing running means no cards`() {
         assertTrue(buildModeCards(groups, listOf(dep("1951", "412", 0, -5)), userLat, userLon).isEmpty())
     }
