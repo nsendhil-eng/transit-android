@@ -8,6 +8,7 @@ import retrofit2.http.GET
 import retrofit2.http.Query
 import space.snapp.waygo.data.api.models.AlertsResponse
 import space.snapp.waygo.data.api.models.Departure
+import space.snapp.waygo.data.api.models.EtaResponse
 import space.snapp.waygo.data.api.models.NextTripsResponse
 import space.snapp.waygo.data.api.models.PlanDelayResponse
 import space.snapp.waygo.data.api.models.PlanResponse
@@ -49,6 +50,15 @@ interface TransitApiService {
     /** Live vehicles on the given trips ("T1,T2"); trips with none reporting are left out */
     @GET("/api/trip-vehicles")
     suspend fun tripVehicles(@Query("trip_ids") tripIds: String): TripVehiclesResponse
+
+    /** Travel time from here to a place, now: a saved-place chip's answer */
+    @GET("/api/eta")
+    suspend fun eta(
+        @Query("fromLat") fromLat: Double,
+        @Query("fromLon") fromLon: Double,
+        @Query("toLat") toLat: Double,
+        @Query("toLon") toLon: Double
+    ): EtaResponse
 
     @GET("/api/stops-near-me")
     suspend fun stopsNearMe(

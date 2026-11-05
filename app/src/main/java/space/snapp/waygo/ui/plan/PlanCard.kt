@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -74,7 +75,8 @@ fun PlanCard(
     val cardBg = Color.White
 
     LaunchedEffect(Unit) {
-        fromFocusRequester.requestFocus()
+        // Opened from "Where to?" or a saved place, From is already my location
+        if (activeField == ActiveField.FROM) fromFocusRequester.requestFocus()
     }
 
     // Sync user location into VM
@@ -315,11 +317,14 @@ fun PlanCard(
                 }
 
                 itineraries.isNotEmpty() -> {
-                    var sortFastest by remember { mutableStateOf(true) }
-                    val sorted = if (sortFastest)
-                        itineraries.sortedBy { it.duration }
-                    else
-                        itineraries.sortedBy { it.walkDistance }
+                    // Default: the trip that gets you there soonest, as the home screen's place chips
+                    // pick. "Fastest" (shortest ride) can leave later and still arrive after it.
+                    var sort by remember { mutableStateOf(PlanSort.ArriveFirst) }
+                    val sorted = when (sort) {
+                        PlanSort.ArriveFirst -> itineraries.sortedBy { it.endTime }
+                        PlanSort.Fastest -> itineraries.sortedBy { it.duration }
+                        PlanSort.LeastWalking -> itineraries.sortedBy { it.walkDistance }
+                    }
                     // One time axis for every card so bars are directly comparable
                     val window = remember(itineraries) {
                         TimeWindow(itineraries.minOf { it.startTime }, itineraries.maxOf { it.endTime })
@@ -350,25 +355,34 @@ fun PlanCard(
                             // Sort chips + refresh button
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                // Three sorts and refresh don't always fit: scroll rather than wrap
+                                modifier = Modifier.horizontalScroll(rememberScrollState())
                             ) {
                                 FilterChip(
-                                    selected = sortFastest,
-                                    onClick = { sortFastest = true },
-                                    label = { Text("Fastest") },
+                                    selected = sort == PlanSort.ArriveFirst,
+                                    onClick = { sort = PlanSort.ArriveFirst },
+                                    label = { Text("Arrive first", maxLines = 1, softWrap = false) },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    }
+                                )
+                                FilterChip(
+                                    selected = sort == PlanSort.Fastest,
+                                    onClick = { sort = PlanSort.Fastest },
+                                    label = { Text("Fastest", maxLines = 1, softWrap = false) },
                                     leadingIcon = {
                                         Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
                                     }
                                 )
                                 FilterChip(
-                                    selected = !sortFastest,
-                                    onClick = { sortFastest = false },
-                                    label = { Text("Least walking") },
+                                    selected = sort == PlanSort.LeastWalking,
+                                    onClick = { sort = PlanSort.LeastWalking },
+                                    label = { Text("Least walking", maxLines = 1, softWrap = false) },
                                     leadingIcon = {
                                         Icon(Icons.Default.DirectionsWalk, contentDescription = null, modifier = Modifier.size(16.dp))
                                     }
                                 )
-                                Spacer(Modifier.weight(1f))
                                 IconButton(
                                     onClick = { viewModel.refresh() },
                                     modifier = Modifier.size(36.dp)
@@ -692,3 +706,6 @@ private fun PlanField(
         trailingContent()
     }
 }
+
+/** How the planner's results are ordered */
+private enum class PlanSort { ArriveFirst, Fastest, LeastWalking }

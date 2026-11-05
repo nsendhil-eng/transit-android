@@ -133,6 +133,24 @@ class PlanViewModel : ViewModel() {
         _suggestions.value = emptyList()
     }
 
+    /** "Where to?" on the home screen: from my location, the destination field ready to type in */
+    fun startFromHere(lat: Double?, lon: Double?) {
+        reset()
+        userLat = lat
+        userLon = lon
+        if (lat != null && lon != null) useMyLocationAsFrom()
+    }
+
+    /** A saved place on the home screen: from my location straight to it, planned at once */
+    fun planFromHere(lat: Double?, lon: Double?, name: String, toLat: Double, toLon: Double) {
+        startFromHere(lat, lon)
+        val to = AddressResult(-2L, name, toLat, toLon)
+        _toSelected.value = to
+        toQuery.value = name
+        _activeField.value = ActiveField.NONE
+        _fromSelected.value?.let { fetchPlan(it, to) }
+    }
+
     fun swap() {
         val tmpQuery = fromQuery.value
         val tmpSelected = _fromSelected.value

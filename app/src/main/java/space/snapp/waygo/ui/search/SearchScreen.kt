@@ -45,6 +45,8 @@ import androidx.compose.ui.focus.focusRequester
 import kotlinx.coroutines.delay
 import androidx.compose.ui.platform.LocalDensity
 import space.snapp.waygo.ui.map.NearbyStopsMapView
+import space.snapp.waygo.ui.map.WhereToHeader
+import space.snapp.waygo.ui.favorites.AddFavouritePlaceSheet
 import space.snapp.waygo.ui.plan.ItineraryDetailScreen
 import space.snapp.waygo.ui.plan.PlanCard
 import space.snapp.waygo.ui.plan.PlanViewModel
@@ -79,6 +81,9 @@ fun SearchScreen(
     var stopsForSaving by remember { mutableStateOf<List<Stop>>(emptyList()) }
     var saveName by remember { mutableStateOf<String?>(null) }
     val favorites by favoritesVM.favorites.collectAsState()
+    val savedPlaces by favoritesVM.favoritePlaces.collectAsState()
+    // "Set home" / "Add place" from the panel: the name to start the place sheet with, or null
+    var addPlaceName by remember { mutableStateOf<String?>(null) }
     // The save prompt opens as a card until closed or something is saved, then stays as a pill
     var savePromptClosed by rememberSaveable { mutableStateOf(false) }
     val savePromptExpanded = favorites.isEmpty() && !savePromptClosed
@@ -145,6 +150,23 @@ fun SearchScreen(
                     onCollapse = { savePromptClosed = true }
                 )
             },
+            sheetHeader = {
+                WhereToHeader(
+                    places = savedPlaces,
+                    userLat = userLat,
+                    userLon = userLon,
+                    onWhereTo = {
+                        planViewModel.startFromHere(userLat, userLon)
+                        inPlanMode = true
+                    },
+                    onSearchStops = { searchOpen = true },
+                    onPlace = { place ->
+                        planViewModel.planFromHere(userLat, userLon, place.name, place.lat, place.lon)
+                        inPlanMode = true
+                    },
+                    onAddPlace = { addPlaceName = it }
+                )
+            },
             onAddStops = { stops -> stops.forEach { viewModel.addStop(it) } },
             onDepartureClick = { dep ->
                 onTripSelected(
@@ -160,6 +182,8 @@ fun SearchScreen(
         )
 
         // ── Overlay UI ──────────────────────────────────────────────────
+        // Planning covers the home panel, which would otherwise show between the result cards
+        if (inPlanMode) Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background.copy(alpha = 0.96f)))
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -454,8 +478,7 @@ fun SearchScreen(
             }
         }
 
-        // While the map is the content: the round search button, with the alert beside it
-        // (a banner for a few seconds, then the ⚠ button)
+        // While the map is the content: the alert, a banner for a few seconds, then the ⚠ button
         if (!inPlanMode && !searchBarShown) {
             Row(
                 verticalAlignment = Alignment.Top,
@@ -465,18 +488,7 @@ fun SearchScreen(
                     .statusBarsPadding()
                     .padding(start = 12.dp, end = 6.dp, top = 8.dp)
             ) {
-                Surface(
-                    onClick = { searchOpen = true },
-                    shape = CircleShape,
-                    color = Color(0xFF22272E),
-                    shadowElevation = 10.dp,
-                    modifier = Modifier.padding(top = 6.dp).size(48.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Search, contentDescription = "Search stops and routes", tint = Color.White)
-                    }
-                }
-                Spacer(Modifier.width(8.dp))
+                // Search lives in the bottom panel now ("Where to?", "Stops & routes")
                 HomeAlertControl(
                     alerts = networkAlerts,
                     collapsed = alertBannerCollapsed,
@@ -517,6 +529,18 @@ fun SearchScreen(
                 }
             }
         }
+    }
+
+    addPlaceName?.let { name ->
+        AddFavouritePlaceSheet(
+            favoritesVM = favoritesVM,
+            initialName = name,
+            onDismiss = { addPlaceName = null },
+            onSave = { place ->
+                favoritesVM.saveFavoritePlace(place)
+                addPlaceName = null
+            }
+        )
     }
 
     if (showSaveSheet) {

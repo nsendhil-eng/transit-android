@@ -60,8 +60,12 @@ fun HomePanel(
     onRequestLocation: () -> Unit,
     /** Height of everything down to the end of the peek rows: the panel's peek height */
     onPeekHeight: (Int) -> Unit,
+    /** Height of the header alone: the panel's lowest position, when dragged down */
+    onHeaderHeight: (Int) -> Unit = {},
     footer: @Composable () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** "Where to?" and saved places, above the routes whatever the state */
+    header: @Composable () -> Unit = {}
 ) {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) { while (true) { delay(15_000); now = System.currentTimeMillis() } }
@@ -73,6 +77,8 @@ fun HomePanel(
 
     Column(modifier) {
         Column(Modifier.onSizeChanged { onPeekHeight(it.height) }) {
+            Box(Modifier.onSizeChanged { onHeaderHeight(it.height) }) { header() }
+            Spacer(Modifier.height(6.dp))
             if (staleMin != null && state == HomePanelState.Ready) {
                 Text("Last updated $staleMin min ago · check your connection", fontSize = 11.sp, color = LateAmber,
                     modifier = Modifier.padding(start = 16.dp, bottom = 4.dp))

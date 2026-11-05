@@ -95,7 +95,9 @@ fun NearbyStopsMapView(
     onAddStops: (List<Stop>) -> Unit,
     onDepartureClick: ((Departure) -> Unit)? = null,
     /** Shown at the end of the bottom panel's list (the save prompt) */
-    sheetFooter: @Composable () -> Unit = {}
+    sheetFooter: @Composable () -> Unit = {},
+    /** Shown at the top of the bottom panel ("Where to?" and saved places) */
+    sheetHeader: @Composable () -> Unit = {}
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -411,8 +413,23 @@ fun NearbyStopsMapView(
 
     val density = LocalDensity.current
     var peekPx by remember { mutableIntStateOf(0) }
-    val peekHeight = SheetHandleHeight + with(density) { peekPx.toDp() }
-    val scaffoldState = rememberBottomSheetScaffoldState()
+    var headerPx by remember { mutableIntStateOf(0) }
+    // Three positions: resting (header + nearest routes), dragged up (every route), and dragged
+    // down to just the header so the map gets the screen. Material's sheet has two, so a drag
+    // below resting "hides" it, which is caught here and turned into the lower peek.
+    var lowered by remember { mutableStateOf(false) }
+    val peekHeight = SheetHandleHeight + with(density) { (if (lowered && headerPx > 0) headerPx else peekPx).toDp() }
+    val scaffoldState = rememberBottomSheetScaffoldState(
+        bottomSheetState = rememberStandardBottomSheetState(skipHiddenState = false)
+    )
+    LaunchedEffect(scaffoldState.bottomSheetState.currentValue) {
+        when (scaffoldState.bottomSheetState.currentValue) {
+            SheetValue.Hidden -> { lowered = true; scaffoldState.bottomSheetState.partialExpand() }
+            // Opened all the way: closing it comes back to the usual resting size
+            SheetValue.Expanded -> lowered = false
+            else -> {}
+        }
+    }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         // Dragged up, the panel stops below the search / alert buttons
@@ -444,7 +461,9 @@ fun NearbyStopsMapView(
                     },
                     onRequestLocation = onRequestLocation,
                     onPeekHeight = { peekPx = it },
+                    onHeaderHeight = { headerPx = it },
                     footer = sheetFooter,
+                    header = sheetHeader,
                     modifier = Modifier.heightIn(max = sheetMax)
                 )
             },

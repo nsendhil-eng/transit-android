@@ -23,13 +23,15 @@ import space.snapp.waygo.data.models.FavoritePlace
 fun AddFavouritePlaceSheet(
     favoritesVM: FavoritesViewModel,
     existing: FavoritePlace? = null,
+    /** A name to start with when adding ("Home" from the home screen's "Set home") */
+    initialName: String = "",
     onDismiss: () -> Unit,
     onSave: (FavoritePlace) -> Unit
 ) {
     val scope = rememberCoroutineScope()
 
     var name by remember {
-        mutableStateOf(existing?.name ?: "")
+        mutableStateOf(existing?.name ?: initialName)
     }
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<AddressResult>>(emptyList()) }
