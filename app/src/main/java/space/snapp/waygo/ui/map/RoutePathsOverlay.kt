@@ -23,31 +23,42 @@ data class RoutePath(
  */
 private const val LANE_OFFSET_DP = 3.5f
 
-/** Unit vector to the left of travel at screen point [i] (y points down), averaged over its two segments */
-private fun leftNormal(xy: List<FloatArray>, i: Int): Pair<Float, Float> {
-    var sx = 0f
-    var sy = 0f
-    for ((a, b) in listOf(i - 1 to i, i to i + 1)) {
-        if (a < 0 || b >= xy.size) continue
-        val dx = xy[b][0] - xy[a][0]
-        val dy = xy[b][1] - xy[a][1]
-        val len = kotlin.math.hypot(dx, dy)
-        if (len < 0.01f) continue
-        sx += dy / len; sy += -dx / len
-    }
-    val len = kotlin.math.hypot(sx, sy)
-    return if (len < 0.01f) 0f to 0f else (sx / len) to (sy / len)
-}
-
 /**
  * The whole routes of the home map's upcoming services, each a raised ribbon: a shadow
  * beneath, the route colour, a thin highlight on top. Static: the live vehicles on them are
  * what moves.
  */
 class RoutePathsOverlay(private val dp: Float) : Overlay() {
+    /** Dimmed lines first, so they sit underneath */
     var paths: List<RoutePath> = emptyList()
+        set(value) { field = value.sortedBy { if (it.dimmed) 0 else 1 } }
 
+    // Drawn every frame while panning, so nothing here is allocated per frame
     private val pt = Point()
+    private val path = Path()
+    private var xs = FloatArray(0)
+    private var ys = FloatArray(0)
+    private var normalX = 0f
+    private var normalY = 0f
+
+    private fun addSegment(a: Int, b: Int, n: Int) {
+        if (a < 0 || b >= n) return
+        val dx = xs[b] - xs[a]
+        val dy = ys[b] - ys[a]
+        val len = kotlin.math.hypot(dx, dy)
+        if (len < 0.01f) return
+        normalX += dy / len; normalY += -dx / len
+    }
+
+    /** Unit vector to the left of travel at screen point [i] (y points down), averaged over its two segments */
+    private fun leftNormal(i: Int, n: Int) {
+        normalX = 0f; normalY = 0f
+        addSegment(i - 1, i, n)
+        addSegment(i, i + 1, n)
+        val len = kotlin.math.hypot(normalX, normalY)
+        if (len < 0.01f) { normalX = 0f; normalY = 0f } else { normalX /= len; normalY /= len }
+    }
+
     private fun stroke(width: Float) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
         strokeWidth = width * dp
@@ -60,14 +71,19 @@ class RoutePathsOverlay(private val dp: Float) : Overlay() {
         if (shadow || paths.isEmpty()) return
         val proj = map.projection
         val lane = LANE_OFFSET_DP * dp
-        // Dimmed lines underneath
-        for (p in paths.sortedBy { if (it.dimmed) 0 else 1 }) {
-            val xy = p.points.map { g -> proj.toPixels(g, pt); floatArrayOf(pt.x.toFloat(), pt.y.toFloat()) }
-            val path = Path().apply {
-                xy.forEachIndexed { i, (x, y) ->
-                    val (nx, ny) = leftNormal(xy, i)
-                    if (i == 0) moveTo(x + nx * lane, y + ny * lane) else lineTo(x + nx * lane, y + ny * lane)
-                }
+        for (p in paths) {
+            val n = p.points.size
+            if (xs.size < n) { xs = FloatArray(n); ys = FloatArray(n) }
+            for (i in 0 until n) {
+                proj.toPixels(p.points[i], pt)
+                xs[i] = pt.x.toFloat(); ys[i] = pt.y.toFloat()
+            }
+            path.rewind()
+            for (i in 0 until n) {
+                leftNormal(i, n)
+                val x = xs[i] + normalX * lane
+                val y = ys[i] + normalY * lane
+                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
             }
             val a = if (p.dimmed) 0.3f else 1f
             bodyPaint.color = p.color

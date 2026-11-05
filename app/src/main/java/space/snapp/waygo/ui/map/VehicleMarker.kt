@@ -9,6 +9,8 @@ import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.BitmapDrawable
+import android.util.LruCache
+import kotlin.math.roundToInt
 
 /**
  * Live vehicle marker: a route-coloured pill with the route number, and a white badge at its
@@ -29,6 +31,33 @@ fun createVehicleMarkerIcon(
     heading: Float?,
     age: String? = null
 ): BitmapDrawable {
+    // Age tags change by the second, so those aren't worth keeping
+    if (age != null) return BitmapDrawable(context.resources, drawVehicleMarker(context, label, routeColor, routeTextColor, heading, age))
+    val rounded = roundedHeading(heading)
+    val key = VehicleIconKey(label, routeColor, routeTextColor, rounded)
+    val bitmap = vehicleIcons.get(key)
+        ?: drawVehicleMarker(context, label, routeColor, routeTextColor, rounded, null).also { vehicleIcons.put(key, it) }
+    // A new drawable each time: markers set alpha on theirs
+    return BitmapDrawable(context.resources, bitmap)
+}
+
+/** Vehicle icons differ by so little that the nearest HEADING_STEP degrees looks the same */
+private const val HEADING_STEP = 5f
+
+fun roundedHeading(heading: Float?): Float? = heading?.let { (it / HEADING_STEP).roundToInt() * HEADING_STEP % 360f }
+
+data class VehicleIconKey(val label: String, val routeColor: Int, val routeTextColor: Int, val heading: Float?)
+
+private val vehicleIcons = LruCache<VehicleIconKey, Bitmap>(64)
+
+private fun drawVehicleMarker(
+    context: Context,
+    label: String,
+    routeColor: Int,
+    routeTextColor: Int,
+    heading: Float?,
+    age: String?
+): Bitmap {
     val dp = context.resources.displayMetrics.density
     val pillH = 30f * dp
     val radius = pillH / 2
@@ -100,7 +129,7 @@ fun createVehicleMarkerIcon(
         canvas.drawText(age, w / 2f, tag.centerY() - (ageText.descent() + ageText.ascent()) / 2, ageText)
     }
 
-    return BitmapDrawable(context.resources, bitmap)
+    return bitmap
 }
 
 /** Shaft + head arrow centred on (cx, cy), pointing [heading] degrees clockwise from north. */

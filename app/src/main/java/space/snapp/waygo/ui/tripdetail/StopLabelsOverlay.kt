@@ -4,7 +4,6 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Point
-import android.graphics.RectF
 import android.graphics.Typeface
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
@@ -36,7 +35,7 @@ const val PRIORITY_KEY = 2
  * skipped. Each label sits perpendicular to the route line so it never covers it.
  */
 class StopLabelsOverlay(
-    private val labels: List<StopLabel>,
+    labels: List<StopLabel>,
     density: Float,
     /** Height of UI floating over the top of the map (the header); no labels under it */
     private val topInsetPx: Float = 0f,
@@ -68,29 +67,71 @@ class StopLabelsOverlay(
     private val p = Point()
     private val q = Point()
 
+    // Everything draw() needs is worked out here: it runs every frame while panning, so it can't
+    // sort, measure text or allocate
+    private var sorted: List<StopLabel> = emptyList()
+    private var alongPoints: List<GeoPoint> = emptyList()
+    private var widths = FloatArray(0)
+    // Rectangles already taken this frame, as left, top, right, bottom
+    private var taken = FloatArray(0)
+    private var takenCount = 0
+
+    /** The labels to draw; replaces the current ones */
+    var labels: List<StopLabel> = emptyList()
+        set(value) {
+            field = value
+            sorted = value.sortedByDescending { it.priority }
+            alongPoints = sorted.map { GeoPoint(it.point.latitude + it.alongLat, it.point.longitude + it.alongLon) }
+            widths = FloatArray(sorted.size) { i ->
+                fill.typeface = if (sorted[i].bold) bold else regular
+                fill.measureText(sorted[i].text)
+            }
+            // Each label can take a dot and a text rectangle, plus the avoid point
+            taken = FloatArray((sorted.size * 2 + 1) * 4)
+        }
+
+    init { this.labels = labels }
+
+    private fun take(left: Float, top: Float, right: Float, bottom: Float) {
+        val i = takenCount++ * 4
+        taken[i] = left; taken[i + 1] = top; taken[i + 2] = right; taken[i + 3] = bottom
+    }
+
+    /** Whether the rectangle touches anything already taken */
+    private fun isTaken(left: Float, top: Float, right: Float, bottom: Float): Boolean {
+        for (n in 0 until takenCount) {
+            val i = n * 4
+            if (left < taken[i + 2] && taken[i] < right && top < taken[i + 3] && taken[i + 1] < bottom) return true
+        }
+        return false
+    }
+
     override fun draw(canvas: Canvas, mapView: MapView, shadow: Boolean) {
-        if (shadow || labels.isEmpty()) return
+        if (shadow || sorted.isEmpty()) return
         val proj = mapView.projection
         val showAll = mapView.zoomLevelDouble >= allLabelsZoom
-        val placed = ArrayList<RectF>()
         val viewW = mapView.width.toFloat()
         val viewH = mapView.height.toFloat()
-        if (dotR > 0f) for (label in labels) {
+        takenCount = 0
+        if (dotR > 0f) for (label in sorted) {
             proj.toPixels(label.point, p)
-            placed += RectF(p.x - dotR, p.y - dotR, p.x + dotR, p.y + dotR)
+            take(p.x - dotR, p.y - dotR, p.x + dotR, p.y + dotR)
         }
         avoid?.let {
             proj.toPixels(it, p)
-            placed += RectF(p.x - 12 * dp, p.y - 12 * dp, p.x + 12 * dp, p.y + 12 * dp)
+            take(p.x - 12 * dp, p.y - 12 * dp, p.x + 12 * dp, p.y + 12 * dp)
         }
+        val padX = 3 * dp
+        val padY = 2 * dp
 
-        for (label in labels.sortedByDescending { it.priority }) {
+        for (index in sorted.indices) {
+            val label = sorted[index]
             if (!showAll && label.priority < PRIORITY_KEY) continue
             proj.toPixels(label.point, p)
             if (p.x < -50 || p.y < -50 || p.x > viewW + 50 || p.y > viewH + 50) continue
 
             // Route direction on screen at this stop, then its perpendicular (screen y points down)
-            proj.toPixels(GeoPoint(label.point.latitude + label.alongLat, label.point.longitude + label.alongLon), q)
+            proj.toPixels(alongPoints[index], q)
             var dx = (q.x - p.x).toFloat()
             var dy = (q.y - p.y).toFloat()
             val len = hypot(dx, dy).takeIf { it > 0.5f } ?: 1f
@@ -101,34 +142,41 @@ class StopLabelsOverlay(
             val face = if (label.bold) bold else regular
             fill.typeface = face
             outline.typeface = face
-            val w = fill.measureText(label.text)
+            val w = widths[index]
             val h = fill.textSize
 
             // Try the right-hand side of travel first, then the left
-            var rect: RectF? = null
-            for (side in floatArrayOf(1f, -1f)) {
+            var placed = false
+            var labelLeft = 0f
+            var labelBottom = 0f
+            var side = 1f
+            for (attempt in 0..1) {
                 val ax = p.x + px * gap * side
                 val ay = p.y + py * gap * side
                 // Anchor the label's near edge to the offset point, centred vertically
                 val left = if (px * side >= 0) ax else ax - w
                 val top = ay - h / 2 + (if (abs(py) > 0.7f) py * side * h / 2 else 0f)
-                val r = RectF(left, top, left + w, top + h)
-                if (r.left < 0 || r.right > viewW || r.top < topInsetPx || r.bottom > viewH) continue
-                if (placed.none { RectF.intersects(it, padded(r)) }) { rect = r; break }
+                val right = left + w
+                val bottom = top + h
+                val fits = left >= 0 && right <= viewW && top >= topInsetPx && bottom <= viewH
+                if (fits && !isTaken(left - padX, top - padY, right + padX, bottom + padY)) {
+                    take(left, top, right, bottom)
+                    labelLeft = left; labelBottom = bottom
+                    placed = true
+                    break
+                }
+                side = -1f
             }
-            val r = rect ?: continue
-            placed += r
+            if (!placed) continue
 
             val alpha = if (label.dimmed) 140 else 255
             fill.alpha = alpha
             outline.alpha = (alpha * 0.92f).toInt()
-            val baseline = r.bottom - fill.descent() * 0.6f
-            canvas.drawText(label.text, r.left, baseline, outline)
-            canvas.drawText(label.text, r.left, baseline, fill)
+            val baseline = labelBottom - fill.descent() * 0.6f
+            canvas.drawText(label.text, labelLeft, baseline, outline)
+            canvas.drawText(label.text, labelLeft, baseline, fill)
         }
     }
-
-    private fun padded(r: RectF) = RectF(r.left - 3 * dp, r.top - 2 * dp, r.right + 3 * dp, r.bottom + 2 * dp)
 }
 
 /**

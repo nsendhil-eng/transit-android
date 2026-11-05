@@ -111,7 +111,23 @@ fun NearbyStopsMapView(
     val selectedGroupState = remember { mutableStateOf<StopGroup?>(null) }
     val mapRef = remember { mutableStateOf<MapView?>(null) }
     val youOverlay = remember { UserLocationOverlay(context) }
-    val heading by rememberCompassHeading()
+    // The map's layers, bottom to top, each redrawn only when its own data changes
+    val density = LocalDensity.current
+    val tripLayer = remember { FolderOverlay() }
+    val routePaths = remember { RoutePathsOverlay(density.density) }
+    val vehicleLayer = remember { FolderOverlay() }
+    val stopLabels = remember {
+        StopLabelsOverlay(
+            emptyList(),
+            density.density,
+            gapDp = 16f,
+            allLabelsZoom = ALL_STOP_LABELS_ZOOM,
+            // Stop markers are 26 dp; a label 16 dp out still clears its own dot
+            dotRadiusDp = 12f
+        )
+    }
+    val stopLayer = remember { FolderOverlay() }
+    val compass = rememberCompassHeading()
     // The map follows you until you pan it; the re-centre button turns following back on
     var following by remember { mutableStateOf(true) }
     // Next departures nearby: each route + direction at its stop nearest you
@@ -127,6 +143,15 @@ fun NearbyStopsMapView(
     var rowsTick by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) { while (true) { delay(15_000); rowsTick++ } }
     val routes = remember(stopGroups, nearbyDeps, rowsTick) { buildNearbyRoutes(stopGroups, nearbyDeps) }
+    // Time to first rows: "Fully drawn" in logcat on launch, WayGoPerf on every return to this tab
+    val composedAtMs = remember { android.os.SystemClock.uptimeMillis() }
+    val hasRoutes = routes.isNotEmpty()
+    LaunchedEffect(hasRoutes) {
+        if (!hasRoutes) return@LaunchedEffect
+        val uptime = android.os.SystemClock.uptimeMillis()
+        android.util.Log.i("WayGoPerf", "rows after ${uptime - composedAtMs} ms, ${uptime - android.os.Process.getStartUptimeMillis()} ms since process start")
+        (context as? android.app.Activity)?.reportFullyDrawn()
+    }
     val selectedRoute = routes.find { it.key == selectedKey }
     val focusedGroupId = selectedRoute?.group?.id
     // The panel's peek rows: the nearest route of each mode
@@ -161,12 +186,16 @@ fun NearbyStopsMapView(
         if (userLat == null || userLon == null) return@LaunchedEffect
         youOverlay.position = GeoPoint(userLat, userLon)
         youOverlay.accuracyM = userAccuracyM
+        stopLabels.avoid = youOverlay.position
         if (following) mapRef.value?.controller?.animateTo(youOverlay.position)
         mapRef.value?.invalidate()
     }
-    LaunchedEffect(heading) {
-        youOverlay.heading = heading
-        mapRef.value?.invalidate()
+    // Collected here rather than read above: reading it above re-ran this whole screen on each 3° turn
+    LaunchedEffect(Unit) {
+        snapshotFlow { compass.value }.collect { heading ->
+            youOverlay.heading = heading
+            mapRef.value?.invalidate()
+        }
     }
 
     // Fetch nearby stops on the first fix, then only after moving a fair way. No fix, no stops:
@@ -221,7 +250,6 @@ fun NearbyStopsMapView(
     // The selected row's whole route and the live vehicles on its next services. Nothing is
     // drawn until a row is tapped: lines redrawn whenever the next bus changed were dizzying.
     // Shapes depend only on the timetable, so each is fetched once and kept for the session.
-    val routePaths = remember { RoutePathsOverlay(context.resources.displayMetrics.density) }
     val shapeCache = remember { mutableStateMapOf<String, List<GeoPoint>>() }
     val drawn = selectedRoute?.departures.orEmpty()
     val missingShapes = drawn.take(1).mapNotNull { it.shapeId }.filter { it !in shapeCache }.toSet()
@@ -241,7 +269,6 @@ fun NearbyStopsMapView(
 
     // The live vehicles on those services, refreshed while the app is on screen. Tapping one
     // opens its trip.
-    val vehicleLayer = remember { FolderOverlay() }
     var liveVehicles by remember { mutableStateOf<List<LiveTripVehicle>>(emptyList()) }
     val drawnTripIds = drawn.map { it.tripId }.distinct()
     LaunchedEffect(drawnTripIds) {
@@ -294,15 +321,12 @@ fun NearbyStopsMapView(
         }
     }
 
-    // Rebuild overlays whenever stops or live trip data changes
-    LaunchedEffect(shownStops, tripLiveData, focusedGroupId, selectedRoute?.first?.heading, peekGroupIds) {
+    // The opened stop's upcoming trips: route shapes and vehicle markers
+    LaunchedEffect(tripLiveData) {
         val map = mapRef.value ?: return@LaunchedEffect
-        val dp = context.resources.displayMetrics.density
-        map.overlays.clear()
-        // clear() also drops the street-name labels overlay, so put it back
-        map.addDarkCanvasLabels(context)
+        val dp = density.density
+        tripLayer.items.clear()
 
-        // Draw route shapes + vehicle markers for the selected stop's upcoming trips
         for (trip in tripLiveData) {
             if (trip.hasPassed) continue
 
@@ -322,7 +346,7 @@ fun NearbyStopsMapView(
                     )
                     outlinePaint.strokeWidth = 5f * dp
                 }
-                map.overlays.add(poly)
+                tripLayer.add(poly)
             }
 
             // Shape after the stop — full color
@@ -332,7 +356,7 @@ fun NearbyStopsMapView(
                     outlinePaint.color = routeColorInt
                     outlinePaint.strokeWidth = 5f * dp
                 }
-                map.overlays.add(poly)
+                tripLayer.add(poly)
             }
 
             // Vehicle marker (only if real-time position available and not past stop)
@@ -355,41 +379,33 @@ fun NearbyStopsMapView(
                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                     setInfoWindow(null)
                 }
-                map.overlays.add(marker)
+                tripLayer.add(marker)
             }
         }
+        map.invalidate()
+    }
 
-        // The selected route and its vehicles, under you and the stops
-        map.overlays.add(routePaths)
-        map.overlays.add(vehicleLayer)
-
-        // You, under the stops so they stay tappable
-        map.overlays.add(youOverlay)
-
+    // Stops and their names
+    LaunchedEffect(shownStops, focusedGroupId, selectedRoute?.first?.heading, peekGroupIds) {
+        val map = mapRef.value ?: return@LaunchedEffect
         // Stop names: the selected stop and the panel's top stops always, the rest once zoomed in
         val cardStops = peekGroupIds
         val focusedHeadings: Map<String, Int?> = listOfNotNull(focusedGroupId).associateWith { selectedRoute?.first?.heading }
-        map.overlays.add(StopLabelsOverlay(
-            shownStops.map { g ->
-                StopLabel(
-                    stopId = g.id,
-                    text = mapStopName(g.name),
-                    point = GeoPoint(g.latitude, g.longitude),
-                    priority = when (g.id) { focusedGroupId -> PRIORITY_KEY + 2; in cardStops -> PRIORITY_KEY; else -> 0 },
-                    bold = g.id == focusedGroupId || g.id in cardStops,
-                    dimmed = false,
-                    // Pretend the "route" runs north, so labels sit beside the dot (right, else left)
-                    alongLat = 0.0001, alongLon = 0.0
-                )
-            },
-            dp,
-            gapDp = 16f,
-            allLabelsZoom = ALL_STOP_LABELS_ZOOM,
-            // Stop markers are 26 dp; padded() adds 3 dp, so a label 16 dp out still clears its own dot
-            dotRadiusDp = 12f
-        ).apply { avoid = youOverlay.position })
+        stopLabels.labels = shownStops.map { g ->
+            StopLabel(
+                stopId = g.id,
+                text = mapStopName(g.name),
+                point = GeoPoint(g.latitude, g.longitude),
+                priority = when (g.id) { focusedGroupId -> PRIORITY_KEY + 2; in cardStops -> PRIORITY_KEY; else -> 0 },
+                bold = g.id == focusedGroupId || g.id in cardStops,
+                dimmed = false,
+                // Pretend the "route" runs north, so labels sit beside the dot (right, else left)
+                alongLat = 0.0001, alongLon = 0.0
+            )
+        }
 
         // Stop markers on top; the focused one bigger with a ring
+        stopLayer.items.clear()
         for (group in shownStops) {
             val marker = Marker(map).apply {
                 position = GeoPoint(group.latitude, group.longitude)
@@ -402,7 +418,7 @@ fun NearbyStopsMapView(
                     true
                 }
             }
-            map.overlays.add(marker)
+            stopLayer.add(marker)
         }
 
         map.invalidate()
@@ -420,7 +436,6 @@ fun NearbyStopsMapView(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val density = LocalDensity.current
     var peekPx by remember { mutableIntStateOf(0) }
     var headerPx by remember { mutableIntStateOf(0) }
     // Three positions: resting (header + nearest routes), dragged up (every route), and dragged
@@ -498,7 +513,13 @@ fun NearbyStopsMapView(
                         zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
                         controller.setZoom(DEFAULT_ZOOM)
                         controller.setCenter(GeoPoint(userLat ?: BRISBANE_LAT, userLon ?: BRISBANE_LON))
+                        overlays.add(tripLayer)
+                        overlays.add(routePaths)
+                        overlays.add(vehicleLayer)
+                        // You, under the stops so they stay tappable
                         overlays.add(youOverlay)
+                        overlays.add(stopLabels)
+                        overlays.add(stopLayer)
                         // Dragging the map stops following you (pinch-zoom keeps it)
                         addMapListener(object : MapListener {
                             override fun onScroll(event: ScrollEvent?) = false
@@ -574,11 +595,24 @@ fun NearbyStopsMapView(
  * the ring showing which way services leave (tells the two sides of a road apart).
  */
 private fun createStopIcon(context: android.content.Context, group: StopGroup, focused: Boolean = false, heading: Int? = null): BitmapDrawable {
+    val key = StopIconKey(group.primaryType, focused, heading, if (group.isMultiPlatform) group.stops.size else 1)
+    val bitmap = stopIcons.get(key) ?: drawStopIcon(context, key).also { stopIcons.put(key, it) }
+    return BitmapDrawable(context.resources, bitmap)
+}
+
+/** What a stop dot looks like, so stops that look alike share one bitmap */
+data class StopIconKey(val type: VehicleType, val focused: Boolean, val heading: Int?, val platforms: Int)
+
+private val stopIcons = android.util.LruCache<StopIconKey, Bitmap>(32)
+
+private fun drawStopIcon(context: android.content.Context, key: StopIconKey): Bitmap {
+    val focused = key.focused
+    val heading = key.heading
     val dp = context.resources.displayMetrics.density
     val size = ((if (focused) (if (heading != null) 46 else 38) else 26) * dp).toInt()
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvas = AndroidCanvas(bitmap)
-    val pinColor = group.primaryType.pinColorInt()
+    val pinColor = key.type.pinColorInt()
     // Outer radius of the dot (ring included); the bitmap may be bigger to fit the arrow
     val outerR = if (focused) 17f * dp else size / 2f - 2 * dp
 
@@ -601,7 +635,7 @@ private fun createStopIcon(context: android.content.Context, group: StopGroup, f
         })
 
     // White type initial
-    val label = when (group.primaryType) {
+    val label = when (key.type) {
         VehicleType.Bus   -> "B"
         VehicleType.Rail  -> "T"
         VehicleType.Ferry -> "F"
@@ -633,7 +667,7 @@ private fun createStopIcon(context: android.content.Context, group: StopGroup, f
     }
 
     // Multi-platform badge
-    if (group.isMultiPlatform) {
+    if (key.platforms > 1) {
         val r = 6f * dp
         // Top-right of the dot, wherever the dot sits in the bitmap
         val bx = size / 2f + outerR * 0.75f
@@ -646,10 +680,10 @@ private fun createStopIcon(context: android.content.Context, group: StopGroup, f
             color = pinColor; textSize = 6f * dp
             textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD
         }
-        canvas.drawText("${group.stops.size}", bx, by - (bp.descent() + bp.ascent()) / 2, bp)
+        canvas.drawText("${key.platforms}", bx, by - (bp.descent() + bp.ascent()) / 2, bp)
     }
 
-    return BitmapDrawable(context.resources, bitmap)
+    return bitmap
 }
 
 private fun VehicleType.pinColorInt(): Int = when (this) {

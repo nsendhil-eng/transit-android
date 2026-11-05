@@ -35,9 +35,19 @@ private val ESRI_DARK_GRAY_LABELS = EsriTileSource(
     "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/"
 )
 
-/** Adds the street label/reference layer on top of [ESRI_DARK_GRAY_BASE]. */
+/** Each map's labels overlay: a tile provider owns threads and a cache, so a map only ever needs one */
+private val labelsOverlays = java.util.WeakHashMap<MapView, TilesOverlay>()
+
+/**
+ * Adds the street label/reference layer on top of [ESRI_DARK_GRAY_BASE]. Safe to call again after
+ * clearing a map's overlays: it puts the same overlay back. (A new one per call leaked a tile
+ * provider, with its threads, on every redraw.) It's released with the map, in MapView.onDetach.
+ */
 fun MapView.addDarkCanvasLabels(context: Context) {
-    val labelsOverlay = TilesOverlay(MapTileProviderBasic(context, ESRI_DARK_GRAY_LABELS), context)
-    labelsOverlay.loadingBackgroundColor = android.graphics.Color.TRANSPARENT
-    overlays.add(labelsOverlay)
+    val labelsOverlay = labelsOverlays.getOrPut(this) {
+        TilesOverlay(MapTileProviderBasic(context, ESRI_DARK_GRAY_LABELS), context).apply {
+            loadingBackgroundColor = android.graphics.Color.TRANSPARENT
+        }
+    }
+    if (labelsOverlay !in overlays) overlays.add(labelsOverlay)
 }
