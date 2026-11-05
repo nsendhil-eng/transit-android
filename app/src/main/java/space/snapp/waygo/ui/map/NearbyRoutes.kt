@@ -39,10 +39,11 @@ data class NearbyRoute(
      * reached via its entrances. Lettered platforms give it away even when the station's name
      * doesn't ("Cultural Centre station"); a train station's street bus bays have none.
      */
-    val isBusStation: Boolean
-        get() = mode == VehicleType.Bus && stop?.parentStation?.isNotBlank() == true &&
+    val isBusStation: Boolean by lazy(LazyThreadSafetyMode.NONE) {
+        mode == VehicleType.Bus && stop?.parentStation?.isNotBlank() == true &&
             (!first.platformCode.isNullOrBlank() ||
                 stop.parentStationName?.let { it.contains("bus station", true) || it.contains("busway", true) } == true)
+    }
 
     val walkMinutes: Int
         get() {
@@ -55,17 +56,18 @@ data class NearbyRoute(
      * "King George Square bus station · platform 1a". The stop number tells the two sides of a
      * road apart.
      */
-    val stopLabel: String
-        get() = placeLabel + (platformLabel?.let { " · $it" } ?: "")
+    val stopLabel: String by lazy(LazyThreadSafetyMode.NONE) { placeLabel + (platformLabel?.let { " · $it" } ?: "") }
 
     /** The stop or station, without the platform: a stop section's heading */
-    val placeLabel: String
-        get() = if (isBusStation || mode == VehicleType.Rail) stop?.parentStationName ?: group.name
-            else (stop?.name ?: group.name).let { name -> mapStopName(name) + (stopNumber(name)?.let { " · stop $it" } ?: "") }
+    val placeLabel: String by lazy(LazyThreadSafetyMode.NONE) {
+        if (isBusStation || mode == VehicleType.Rail) stop?.parentStationName ?: group.name
+        else (stop?.name ?: group.name).let { name -> mapStopName(name) + (stopNumber(name)?.let { " · stop $it" } ?: "") }
+    }
 
     /** "platform 2", when the service leaves from a numbered platform */
-    val platformLabel: String?
-        get() = first.platformCode?.takeIf { it.isNotBlank() && (isBusStation || mode == VehicleType.Rail) }?.let { "platform $it" }
+    val platformLabel: String? by lazy(LazyThreadSafetyMode.NONE) {
+        first.platformCode?.takeIf { it.isNotBlank() && (isBusStation || mode == VehicleType.Rail) }?.let { "platform $it" }
+    }
 }
 
 /**
@@ -112,8 +114,9 @@ fun stopSections(routes: List<NearbyRoute>, exclude: Set<String> = emptySet()): 
 }
 
 /** "Coronation Dr at Wesley Hospital, stop 9" -> "9"; "Wickham Terrace Stop 132 near Albert St" -> "132" */
-fun stopNumber(name: String): String? =
-    Regex("""(?:,\s*stop\s+|\bStop\s+)(\w+)""", RegexOption.IGNORE_CASE).find(name)?.groupValues?.get(1)
+fun stopNumber(name: String): String? = STOP_NUMBER.find(name)?.groupValues?.get(1)
+
+private val STOP_NUMBER = Regex("""(?:,\s*stop\s+|\bStop\s+)(\w+)""", RegexOption.IGNORE_CASE)
 
 private val MODE_ORDER = listOf(VehicleType.Rail, VehicleType.Bus, VehicleType.Ferry, VehicleType.Tram)
 

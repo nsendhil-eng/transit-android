@@ -140,9 +140,9 @@ fun NearbyStopsMapView(
     // When departures last arrived; the panel dims if refreshes keep failing
     var depsUpdatedMs by remember { mutableLongStateOf(0L) }
     // Rebuilt every 15 s too, so a service that has just left drops off without waiting for a fetch
-    var rowsTick by remember { mutableIntStateOf(0) }
-    LaunchedEffect(Unit) { while (true) { delay(15_000); rowsTick++ } }
-    val routes = remember(stopGroups, nearbyDeps, rowsTick) { buildNearbyRoutes(stopGroups, nearbyDeps) }
+    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) { while (true) { delay(15_000); nowMs = System.currentTimeMillis() } }
+    val routes = remember(stopGroups, nearbyDeps, nowMs) { buildNearbyRoutes(stopGroups, nearbyDeps) }
     // Time to first rows: "Fully drawn" in logcat on launch, WayGoPerf on every return to this tab
     val composedAtMs = remember { android.os.SystemClock.uptimeMillis() }
     val hasRoutes = routes.isNotEmpty()
@@ -482,6 +482,7 @@ fun NearbyStopsMapView(
                     routes = routes,
                     selectedKey = selectedKey,
                     updatedAtMs = depsUpdatedMs,
+                    now = nowMs,
                     onRouteTap = { r ->
                         if (selectedKey == r.key) {
                             selectedGroupState.value = r.group

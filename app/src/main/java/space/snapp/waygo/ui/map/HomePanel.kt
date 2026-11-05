@@ -25,7 +25,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
 import space.snapp.waygo.data.api.models.Departure
 import space.snapp.waygo.data.api.models.VehicleType
 import space.snapp.waygo.ui.components.icon
@@ -61,6 +60,8 @@ fun HomePanel(
     selectedKey: String?,
     /** When the departures were fetched; older than STALE_AFTER_MS and the panel says so */
     updatedAtMs: Long,
+    /** The panel's clock, ticking with [routes] so the two only update together */
+    now: Long,
     onRouteTap: (NearbyRoute) -> Unit,
     onRequestLocation: () -> Unit,
     /** Height of everything down to the end of the peek rows: the panel's peek height */
@@ -74,8 +75,6 @@ fun HomePanel(
     /** "Where to?" and saved places, above the routes whatever the state */
     header: @Composable () -> Unit = {}
 ) {
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) { while (true) { delay(15_000); now = System.currentTimeMillis() } }
     val staleMin = if (updatedAtMs > 0 && now - updatedAtMs > STALE_AFTER_MS) ((now - updatedAtMs) / 60_000).coerceAtLeast(1) else null
 
     val peek = remember(routes) { peekRoutes(routes) }
@@ -89,7 +88,7 @@ fun HomePanel(
     // above a separate list, a swipe starting on the block dragged the whole panel down.)
     // Every route, under its stop, even those in the resting rows: a stop is shown complete
     // (excluding them made Regatta, whose only route is the F1, vanish from the list)
-    val sections = remember(routes, now) { stopSections(routes) }
+    val sections = remember(routes) { stopSections(routes) }
     LazyColumn(modifier, state = listState) {
         // The resting view: header, then the state message or the peek rows. Its height is the
         // panel's peek height, measured while it sits at the top of the list.
@@ -128,8 +127,8 @@ fun HomePanel(
         // (they never move); within a stop, soonest first
         if (state == HomePanelState.Ready) {
             for (section in sections) {
-                item(key = "s-${section.group.id}") { StopHeader(section) }
-                items(section.routes, key = { it.key }) { r ->
+                item(key = "s-${section.group.id}", contentType = "stop") { StopHeader(section) }
+                items(section.routes, key = { it.key }, contentType = { "route" }) { r ->
                     RouteRow(r, selected = r.key == selectedKey, now = now, onTap = { onRouteTap(r) }, underStop = true)
                 }
             }

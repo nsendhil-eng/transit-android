@@ -193,4 +193,19 @@ class NearbyRoutesTest {
         assertTrue(inSeq(-28.0, 153.4))        // Gold Coast
         assertFalse(inSeq(-33.87, 151.21))     // Sydney
     }
+
+    @Test
+    fun `departure times read both API formats, and the live time wins`() {
+        val at = "2026-11-06T01:02:03.000Z"
+        val ms = java.time.Instant.parse(at).toEpochMilli()
+        assertEquals(ms, dep("1", "412", 0, 8).copy(expectedDepartureUtc = at).departureMs)
+        assertEquals(ms, dep("1", "412", 0, 8).copy(expectedDepartureUtc = "2026-11-06T01:02:03Z").departureMs)
+        assertEquals(ms, dep("1", "412", 0, 8).copy(scheduledDepartureUtc = at, expectedDepartureUtc = null).departureMs)
+    }
+
+    @Test
+    fun `an unreadable departure time counts as now rather than crashing`() {
+        val d = dep("1", "412", 0, 8).copy(expectedDepartureUtc = "soon")
+        assertEquals(0, d.liveSeconds)
+    }
 }

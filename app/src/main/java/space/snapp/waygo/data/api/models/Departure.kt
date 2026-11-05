@@ -1,8 +1,8 @@
 package space.snapp.waygo.data.api.models
 
 import com.google.gson.annotations.SerializedName
-import java.text.SimpleDateFormat
-import java.util.*
+import java.time.Instant
+import java.util.Date
 
 data class Departure(
     @SerializedName("trip_id") val tripId: String,
@@ -39,14 +39,21 @@ data class Departure(
 
     val id: String get() = "$tripId-$stopId"
 
-    val departureDate: Date
+    // Read many times per row and inside sorts, so parsed once. A plain field, not `by lazy`:
+    // Gson skips the constructor, which would leave a delegate null. 0 = not parsed yet.
+    @Transient private var parsedDepartureMs = 0L
+
+    /** The live time if there is one, else the timetable's; "now" if it can't be read */
+    val departureMs: Long
         get() {
-            val raw = expectedDepartureUtc ?: scheduledDepartureUtc
-            return parseIso(raw) ?: Date()
+            if (parsedDepartureMs == 0L) parsedDepartureMs = parseIso(expectedDepartureUtc ?: scheduledDepartureUtc) ?: return System.currentTimeMillis()
+            return parsedDepartureMs
         }
 
+    val departureDate: Date get() = Date(departureMs)
+
     val liveSeconds: Int
-        get() = ((departureDate.time - System.currentTimeMillis()) / 1000).toInt()
+        get() = ((departureMs - System.currentTimeMillis()) / 1000).toInt()
 
     val countdownText: String
         get() {
@@ -64,9 +71,7 @@ data class Departure(
         get() = routeTextColor?.let { parseHex(it) }
 
     private companion object {
-        val fmtMs = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
-        val fmt   = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'",     Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
-        fun parseIso(s: String): Date? = runCatching { fmtMs.parse(s) }.getOrNull() ?: runCatching { fmt.parse(s) }.getOrNull()
+        fun parseIso(s: String): Long? = runCatching { Instant.parse(s).toEpochMilli() }.getOrNull()
         fun parseHex(hex: String): Int? = runCatching { android.graphics.Color.parseColor("#${hex.trimStart('#')}") }.getOrNull()
     }
 }

@@ -179,19 +179,23 @@ class StopLabelsOverlay(
     }
 }
 
+private val NUMBERED_STOP = Regex("""^(.+?)\s+Stop\s+\w+\s+near\s+(.+)$""", RegexOption.IGNORE_CASE)
+private val STOP_SUFFIX = Regex(""",\s*(stop|platform|zone)\b.*$""", RegexOption.IGNORE_CASE)
+private val STOP_TAIL = Regex("""\s+(stop|platform)\s+[\w/]+$""", RegexOption.IGNORE_CASE)
+
 /**
  * Short map label for a stop: "Coronation Dr at Wesley Hospital, stop 9" -> "Wesley Hospital",
  * "Roma Street busway, platform 2" -> "Roma Street busway". The full name is in the list below.
  */
 fun mapStopName(name: String): String {
     // City stops numbered mid-name: "Wickham Terrace Stop 132 near Albert St" -> "Wickham Tce near Albert St"
-    Regex("""^(.+?)\s+Stop\s+\w+\s+near\s+(.+)$""", RegexOption.IGNORE_CASE).find(name)?.let { m ->
+    NUMBERED_STOP.find(name)?.let { m ->
         return "${abbreviateStreet(m.groupValues[1])} near ${m.groupValues[2]}"
     }
     val core = name.substringAfter(" at ", name)
     return core
-        .replace(Regex(""",\s*(stop|platform|zone)\b.*$""", RegexOption.IGNORE_CASE), "")
-        .replace(Regex("""\s+(stop|platform)\s+[\w/]+$""", RegexOption.IGNORE_CASE), "")
+        .replace(STOP_SUFFIX, "")
+        .replace(STOP_TAIL, "")
         .trim()
         .ifEmpty { name }
 }
