@@ -9,6 +9,7 @@ import android.graphics.Path
 import android.graphics.Typeface
 import android.graphics.drawable.BitmapDrawable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.LocationSearching
@@ -435,7 +436,10 @@ fun NearbyStopsMapView(
     val scaffoldState = rememberBottomSheetScaffoldState(
         bottomSheetState = rememberStandardBottomSheetState(skipHiddenState = false)
     )
+    val panelList = rememberLazyListState()
     LaunchedEffect(scaffoldState.bottomSheetState.currentValue) {
+        // Closed back to resting (or lowered): show its top, "Where to?", not the middle of the list
+        if (scaffoldState.bottomSheetState.currentValue != SheetValue.Expanded) panelList.scrollToItem(0)
         when (scaffoldState.bottomSheetState.currentValue) {
             SheetValue.Hidden -> { lowered = true; scaffoldState.bottomSheetState.partialExpand() }
             // Opened all the way: closing it comes back to the usual resting size
@@ -477,6 +481,7 @@ fun NearbyStopsMapView(
                     onHeaderHeight = { headerPx = it },
                     footer = sheetFooter,
                     header = sheetHeader,
+                    listState = panelList,
                     modifier = Modifier.heightIn(max = sheetMax)
                 )
             },

@@ -122,6 +122,42 @@ class NearbyRoutesTest {
     }
 
     @Test
+    fun `full list is by stop, nearest first, and soonest first within a stop`() {
+        val routes = buildNearbyRoutes(groups, listOf(
+            dep("1951", "411", 0, 31), dep("1951", "412", 0, 3), dep("1951", "425", 0, 13),   // stop 9
+            dep("1944", "412", 1, 8),                                                         // stop 10, across the road
+            dep("1882", "375", 0, 1)                                                          // Milton, further
+        ))
+        val sections = stopSections(routes)
+        assertEquals(listOf("1951", "1944", "1882"), sections.map { it.first.first.stopId })
+        // 411 used to sit above 412 on route number alone; within its stop it now goes by time
+        assertEquals(listOf("412", "425", "411"), sections[0].routes.map { it.first.routeNumber })
+        assertEquals("Wesley Hospital · stop 9", sections[0].first.placeLabel)
+        // A stop whose only route is also a resting row (Regatta's F1) still has its section
+        val ferry = stop("317571", "Regatta ferry terminal", -27.4830, 152.9990, 350.0, type = 4)
+        val withFerry = buildNearbyRoutes(groupStops(listOf(stop9, ferry)), listOf(dep("1951", "412", 0, 3), dep("317571", "F1", 0, 6, type = "Ferry")))
+        assertEquals(listOf("412", "F1"), stopSections(withFerry).map { it.first.first.routeNumber })
+    }
+
+    @Test
+    fun `two stops sharing a name are told apart by which way their buses go`() {
+        // Translink names both sides of Coronation Dr "Wesley Hospital, stop 9"
+        val city = stop("1951", "Coronation Dr at Wesley Hospital, stop 9", -27.4806, 152.9965, 198.0)
+        val out = stop("1944", "Coronation Dr at Wesley Hospital, stop 9", -27.4809, 152.9962, 213.0)
+        val routes = buildNearbyRoutes(groupStops(listOf(city, out)), listOf(
+            dep("1951", "412", 0, 8, headsign = "City, Roma St").copy(heading = 40),
+            dep("1951", "425", 0, 4, headsign = "City, Adelaide St").copy(heading = 40),
+            dep("1944", "412", 1, 4, headsign = "St Lucia South").copy(heading = 225),
+            dep("1944", "444", 1, 12, headsign = "Moggill").copy(heading = 220)
+        ))
+        assertEquals(listOf("city-bound", "outbound"), stopSections(routes).map { it.direction })
+        // Without a city-bound side, the compass says which way
+        assertEquals("heading SW", directionHint(routes.filter { it.first.stopId == "1944" }))
+        // A stop with a name of its own gets no hint
+        assertEquals(null, stopSections(buildNearbyRoutes(groups, listOf(dep("1882", "375", 0, 1)))).single().direction)
+    }
+
+    @Test
     fun `stop numbers tell the two sides of a road apart`() {
         assertEquals("9", stopNumber("Coronation Dr at Wesley Hospital, stop 9"))
         assertEquals("132", stopNumber("Wickham Terrace Stop 132 near Albert St"))

@@ -4,6 +4,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -67,6 +69,8 @@ fun HomePanel(
     onHeaderHeight: (Int) -> Unit = {},
     footer: @Composable () -> Unit,
     modifier: Modifier = Modifier,
+    /** The panel's scroll position: the map view returns it to the top when the panel closes */
+    listState: LazyListState = rememberLazyListState(),
     /** "Where to?" and saved places, above the routes whatever the state */
     header: @Composable () -> Unit = {}
 ) {
@@ -74,70 +78,79 @@ fun HomePanel(
     LaunchedEffect(Unit) { while (true) { delay(15_000); now = System.currentTimeMillis() } }
     val staleMin = if (updatedAtMs > 0 && now - updatedAtMs > STALE_AFTER_MS) ((now - updatedAtMs) / 60_000).coerceAtLeast(1) else null
 
-    // Modes in order of their nearest route; each mode's routes nearest first (already sorted)
-    val byMode = remember(routes) { routes.groupBy { it.mode }.entries.sortedBy { (_, r) -> r.first().distanceM } }
     val peek = remember(routes) { peekRoutes(routes) }
-    val peekKeys = peek.map { it.key }.toSet()
     // Nothing within a 10 minute walk (semi-rural streets): say so, and what's nearest
     val nearestRoute = routes.minByOrNull { it.distanceM }
     val farNote = nearestRoute?.takeIf { it.walkMinutes > FAR_WALK_MIN }
         ?.let { "No stops within a $FAR_WALK_MIN min walk · nearest: ${it.stopLabel}, ${it.walkMinutes} min walk" }
 
-    Column(modifier) {
-        Column(Modifier.onSizeChanged { onPeekHeight(it.height) }) {
-            Box(Modifier.onSizeChanged { onHeaderHeight(it.height) }) { header() }
-            Spacer(Modifier.height(6.dp))
-            if (staleMin != null && state == HomePanelState.Ready) {
-                Text("Last updated $staleMin min ago · check your connection", fontSize = 11.sp, color = LateAmber,
-                    modifier = Modifier.padding(start = 16.dp, bottom = 4.dp))
-            }
-            when (state) {
-                HomePanelState.NoLocation -> Message(
-                    "Allow location to see what's leaving near you",
-                    action = "Allow location", onAction = onRequestLocation, icon = true
-                )
-                HomePanelState.OutsideSeq -> Message("WayGo covers South East Queensland. Nothing nearby to show here.")
-                HomePanelState.Loading -> Message("Finding what's leaving near you…")
-                HomePanelState.NothingNearby -> Message("No stops or services within 3 km right now. Try Where to? for the best way out.")
-                HomePanelState.Ready -> Column(Modifier.alpha(if (staleMin != null) 0.5f else 1f)) {
-                    farNote?.let {
-                        Text(it, fontSize = 12.sp, color = LateAmber, modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 4.dp))
-                    }
-                    for (r in peek) RouteRow(r, selected = r.key == selectedKey, now = now, onTap = { onRouteTap(r) })
-                    if (routes.size > peek.size) {
-                        Text("${routes.size - peek.size} more routes nearby · drag up", fontSize = 11.sp, color = Muted,
-                            modifier = Modifier.padding(start = 16.dp, top = 4.dp))
+    // One scrolling list for the whole panel, header included: a downward swipe scrolls the
+    // content back up first and only lowers the panel once it's at the top. (With a fixed block
+    // above a separate list, a swipe starting on the block dragged the whole panel down.)
+    // Every route, under its stop, even those in the resting rows: a stop is shown complete
+    // (excluding them made Regatta, whose only route is the F1, vanish from the list)
+    val sections = remember(routes, now) { stopSections(routes) }
+    LazyColumn(modifier, state = listState) {
+        // The resting view: header, then the state message or the peek rows. Its height is the
+        // panel's peek height, measured while it sits at the top of the list.
+        item(key = "peek") {
+            Column(Modifier.onSizeChanged { onPeekHeight(it.height) }) {
+                Box(Modifier.onSizeChanged { onHeaderHeight(it.height) }) { header() }
+                Spacer(Modifier.height(6.dp))
+                if (staleMin != null && state == HomePanelState.Ready) {
+                    Text("Last updated $staleMin min ago · check your connection", fontSize = 11.sp, color = LateAmber,
+                        modifier = Modifier.padding(start = 16.dp, bottom = 4.dp))
+                }
+                when (state) {
+                    HomePanelState.NoLocation -> Message(
+                        "Allow location to see what's leaving near you",
+                        action = "Allow location", onAction = onRequestLocation, icon = true
+                    )
+                    HomePanelState.OutsideSeq -> Message("WayGo covers South East Queensland. Nothing nearby to show here.")
+                    HomePanelState.Loading -> Message("Finding what's leaving near you…")
+                    HomePanelState.NothingNearby -> Message("No stops or services within 3 km right now. Try Where to? for the best way out.")
+                    HomePanelState.Ready -> Column(Modifier.alpha(if (staleMin != null) 0.5f else 1f)) {
+                        farNote?.let {
+                            Text(it, fontSize = 12.sp, color = LateAmber, modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 4.dp))
+                        }
+                        for (r in peek) RouteRow(r, selected = r.key == selectedKey, now = now, onTap = { onRouteTap(r) })
+                        if (routes.size > peek.size) {
+                            Text("All ${routes.size} routes nearby, by stop · drag up", fontSize = 11.sp, color = Muted,
+                                modifier = Modifier.padding(start = 16.dp, top = 4.dp))
+                        }
                     }
                 }
+                Spacer(Modifier.height(10.dp))
             }
-            Spacer(Modifier.height(10.dp))
         }
 
-        // Revealed by dragging the panel up: the rest of each mode (the peek rows stay above)
-        LazyColumn(Modifier.weight(1f, fill = false)) {
-            if (state == HomePanelState.Ready) {
-                for ((mode, all) in byMode) {
-                    val list = all.filter { it.key !in peekKeys }
-                    if (list.isEmpty()) continue
-                    item(key = "h-$mode") {
-                        Text(modeHeading(mode, list.size), style = MaterialTheme.typography.labelLarge, color = Muted,
-                            modifier = Modifier.padding(start = 16.dp, top = 10.dp, bottom = 2.dp))
-                    }
-                    items(list, key = { it.key }) { r ->
-                        RouteRow(r, selected = r.key == selectedKey, now = now, onTap = { onRouteTap(r) })
-                    }
+        // Revealed by dragging the panel up: every route, under its stop. Stops nearest first
+        // (they never move); within a stop, soonest first
+        if (state == HomePanelState.Ready) {
+            for (section in sections) {
+                item(key = "s-${section.group.id}") { StopHeader(section) }
+                items(section.routes, key = { it.key }) { r ->
+                    RouteRow(r, selected = r.key == selectedKey, now = now, onTap = { onRouteTap(r) }, underStop = true)
                 }
             }
-            item { Box(Modifier.padding(12.dp)) { footer() } }
         }
+        item(key = "footer") { Box(Modifier.padding(12.dp)) { footer() } }
     }
 }
 
-private fun modeHeading(mode: VehicleType, n: Int): String {
-    val noun = when (mode) {
-        VehicleType.Rail -> "trains"; VehicleType.Bus -> "buses"; VehicleType.Ferry -> "ferries"; VehicleType.Tram -> "trams"
+/** "🚌 Wesley Hospital · stop 9 · city-bound · 🚶 4 min", above that stop's routes */
+@Composable
+private fun StopHeader(section: StopSection) {
+    val r = section.first
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 2.dp)) {
+        Icon(r.mode.icon(), contentDescription = r.mode.label, tint = r.mode.tint, modifier = Modifier.size(15.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(r.placeLabel + (section.direction?.let { " · $it" } ?: ""), style = MaterialTheme.typography.labelLarge,
+            color = DestText, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+        Text("  ·  ", fontSize = 12.sp, color = Muted)
+        Icon(Icons.AutoMirrored.Filled.DirectionsWalk, null, tint = Muted, modifier = Modifier.size(13.dp))
+        Text("${section.routes.minOf { it.walkMinutes }} min", fontSize = 12.sp, color = Muted)
     }
-    return "More $noun · $n"
 }
 
 @Composable
@@ -154,7 +167,14 @@ private fun Message(text: String, action: String? = null, onAction: () -> Unit =
  *       Wesley Hospital · stop 9 · 🚶 2 min
  */
 @Composable
-private fun RouteRow(r: NearbyRoute, selected: Boolean, now: Long, onTap: () -> Unit) {
+private fun RouteRow(
+    r: NearbyRoute,
+    selected: Boolean,
+    now: Long,
+    onTap: () -> Unit,
+    /** Listed under its stop's header: no stop or walk line, just the platform when there is one */
+    underStop: Boolean = false
+) {
     Surface(
         color = if (selected) RowSelected else Color.Transparent,
         border = if (selected) BorderStroke(1.dp, Accent.copy(alpha = 0.6f)) else null,
@@ -182,7 +202,11 @@ private fun RouteRow(r: NearbyRoute, selected: Boolean, now: Long, onTap: () -> 
                         color = if (i == 0) dep.timeColor else Muted, maxLines = 1)
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 21.dp, top = 2.dp)) {
+            if (underStop) {
+                r.platformLabel?.let {
+                    Text(it, fontSize = 11.sp, color = Muted, modifier = Modifier.padding(start = 21.dp, top = 2.dp))
+                }
+            } else Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 21.dp, top = 2.dp)) {
                 Text(r.stopLabel, fontSize = 11.sp, color = Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false))
                 Text("  ·  ", fontSize = 11.sp, color = Muted)

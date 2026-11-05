@@ -56,17 +56,59 @@ data class NearbyRoute(
      * road apart.
      */
     val stopLabel: String
-        get() {
-            val platform = first.platformCode?.takeIf { it.isNotBlank() }
-            return when {
-                isBusStation || mode == VehicleType.Rail ->
-                    (stop?.parentStationName ?: group.name) + (platform?.let { " · platform $it" } ?: "")
-                else -> {
-                    val name = stop?.name ?: group.name
-                    mapStopName(name) + (stopNumber(name)?.let { " · stop $it" } ?: "")
-                }
-            }
-        }
+        get() = placeLabel + (platformLabel?.let { " · $it" } ?: "")
+
+    /** The stop or station, without the platform: a stop section's heading */
+    val placeLabel: String
+        get() = if (isBusStation || mode == VehicleType.Rail) stop?.parentStationName ?: group.name
+            else (stop?.name ?: group.name).let { name -> mapStopName(name) + (stopNumber(name)?.let { " · stop $it" } ?: "") }
+
+    /** "platform 2", when the service leaves from a numbered platform */
+    val platformLabel: String?
+        get() = first.platformCode?.takeIf { it.isNotBlank() && (isBusStation || mode == VehicleType.Rail) }?.let { "platform $it" }
+}
+
+/**
+ * One stop (or station) in the panel's full list, with the routes leaving from it. [direction]
+ * tells apart stops that share a name: Translink calls both sides of Coronation Dr "Wesley
+ * Hospital, stop 9".
+ */
+data class StopSection(val group: StopGroup, val routes: List<NearbyRoute>, val direction: String? = null) {
+    val first: NearbyRoute get() = routes.first()
+}
+
+/** Destinations that mean "into the city" in SEQ headsigns */
+private val CITY_HEADSIGN = Regex("""\bCity\b|Queen Street|Roma St|Central station|Cultural Centre""", RegexOption.IGNORE_CASE)
+private val COMPASS = listOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+
+/** "city-bound" when most routes head into the city, else "heading SW" from their average heading */
+fun directionHint(routes: List<NearbyRoute>): String? {
+    if (routes.count { CITY_HEADSIGN.containsMatchIn(it.first.headsign) } * 2 > routes.size) return "city-bound"
+    val headings = routes.mapNotNull { it.first.heading }.ifEmpty { return null }
+    val x = headings.sumOf { kotlin.math.sin(Math.toRadians(it.toDouble())) }
+    val y = headings.sumOf { kotlin.math.cos(Math.toRadians(it.toDouble())) }
+    val mean = (Math.toDegrees(kotlin.math.atan2(x, y)) + 360) % 360
+    return "heading ${COMPASS[((mean + 22.5) / 45).toInt() % 8]}"
+}
+
+/**
+ * The panel's full list, by stop: stops nearest first (a steady order, so whole sections never
+ * move), and within each stop the route leaving soonest first, so the bus you can catch tops
+ * its stop. Routes in [exclude] (the resting rows above) are left out; empty stops drop.
+ */
+fun stopSections(routes: List<NearbyRoute>, exclude: Set<String> = emptySet()): List<StopSection> {
+    val sections = routes.filter { it.key !in exclude }
+        .groupBy { it.group.id }
+        .values
+        .map { list -> StopSection(list.first().group, list.sortedBy { it.first.liveSeconds }) }
+        .sortedWith(compareBy({ s -> s.routes.minOf { it.distanceM } }, { it.group.name }))
+    // Stops sharing a heading get the way their buses go; beside a city-bound twin, "outbound"
+    val hints = sections.groupBy { it.first.placeLabel }.filterValues { it.size > 1 }.values.flatMap { twins ->
+        val raw = twins.map { it to directionHint(it.routes) }
+        val anyCity = raw.any { it.second == "city-bound" }
+        raw.map { (section, hint) -> section.group.id to if (anyCity && hint != "city-bound") "outbound" else hint }
+    }.toMap()
+    return sections.map { s -> hints[s.group.id]?.let { s.copy(direction = it) } ?: s }
 }
 
 /** "Coronation Dr at Wesley Hospital, stop 9" -> "9"; "Wickham Terrace Stop 132 near Albert St" -> "132" */
