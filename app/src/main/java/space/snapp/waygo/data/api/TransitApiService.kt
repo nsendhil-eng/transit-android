@@ -6,6 +6,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
 import retrofit2.http.Query
+import space.snapp.waygo.data.api.models.AddressResult
 import space.snapp.waygo.data.api.models.AlertsResponse
 import space.snapp.waygo.data.api.models.Departure
 import space.snapp.waygo.data.api.models.EtaResponse
@@ -59,6 +60,14 @@ interface TransitApiService {
         @Query("toLat") toLat: Double,
         @Query("toLon") toLon: Double
     ): EtaResponse
+
+    /** Places and addresses in SEQ for "Where to?" and saved places, biased towards lat/lon */
+    @GET("/api/places")
+    suspend fun places(
+        @Query("q") query: String,
+        @Query("lat") lat: Double? = null,
+        @Query("lon") lon: Double? = null
+    ): List<AddressResult>
 
     @GET("/api/stops-near-me")
     suspend fun stopsNearMe(
