@@ -35,7 +35,11 @@ interface TransitApiService {
         @Query("per_stop") perStop: Int? = null,
         @Query("get_off_stop") getOffStop: String? = null,
         // 1 = include each departure's heading (which way it leaves the stop)
-        @Query("with_heading") withHeading: Int? = null
+        @Query("with_heading") withHeading: Int? = null,
+        // Each route + direction's next N departures from its stop nearest lat/lon
+        @Query("per_route") perRoute: Int? = null,
+        @Query("lat") lat: Double? = null,
+        @Query("lon") lon: Double? = null
     ): List<Departure>
 
     /** Whole route shapes, simplified: `ids` is "shapeId,shapeId" */
@@ -50,7 +54,9 @@ interface TransitApiService {
     suspend fun stopsNearMe(
         @Query("lat") lat: Double,
         @Query("lon") lon: Double,
-        @Query("radius") radius: Int = 500
+        @Query("radius") radius: Int = 500,
+        // Trains and ferries this far away too (a station worth the walk)
+        @Query("far_radius") farRadius: Int? = null
     ): List<Stop>
 
     @GET("/api/shapes-near-me")

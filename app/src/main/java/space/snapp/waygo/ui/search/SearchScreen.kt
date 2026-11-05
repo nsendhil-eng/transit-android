@@ -60,6 +60,8 @@ fun SearchScreen(
     userLat: Double?,
     userLon: Double?,
     userAccuracyM: Float? = null,
+    hasLocationPermission: Boolean = true,
+    onRequestLocation: () -> Unit = {},
     networkAlertsVM: NetworkAlertsViewModel,
     onTripSelected: (TripDetailArgs) -> Unit = {}
 ) {
@@ -129,6 +131,8 @@ fun SearchScreen(
             userLat = userLat,
             userLon = userLon,
             userAccuracyM = userAccuracyM,
+            hasLocationPermission = hasLocationPermission,
+            onRequestLocation = onRequestLocation,
             // The save prompt sits at the end of the map's bottom panel
             sheetFooter = {
                 SaveStopsPrompt(

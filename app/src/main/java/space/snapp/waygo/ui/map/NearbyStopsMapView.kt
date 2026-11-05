@@ -64,7 +64,9 @@ private const val BRISBANE_LON = 153.0251
 private const val STOP_LIVE_REFRESH_MS = 5_000L
 private const val CALLOUT_REFRESH_MS = 30_000L
 private const val PAN_SETTLE_MS = 1_500L
-private const val MAX_CALLOUT_STOPS = 30
+private const val MAX_CALLOUT_STOPS = 45
+/** Trains and ferries are looked for this far away (about a 15 minute walk); buses within 500 m */
+private const val FAR_RADIUS_M = 1200
 /** Refetch nearby stops only after moving this far (GPS updates every 10 s) */
 private const val REFETCH_STOPS_AFTER_M = 150.0
 /** Starting zoom, and where the re-centre button returns to */
@@ -73,14 +75,12 @@ private const val DEFAULT_ZOOM = 16.5
 private val SheetHandleHeight = 20.dp
 /** Room left above the panel when dragged all the way up: status bar, search and alert buttons */
 private val SHEET_TOP_GAP = 140.dp
-/** Zoom for a focused pair of stops (both sides of a road), so the two dots separate */
-private const val PAIR_FOCUS_ZOOM = 17.5
-/** Below this zoom only the mode-card stops are labelled */
+/** Below this zoom only the panel's top stops are labelled */
 private const val ALL_STOP_LABELS_ZOOM = 15.5
 /** From this zoom every stop is drawn; below it, stops closer than STOP_GAP_DP on screen thin out */
 private const val ALL_STOPS_ZOOM = 17.5
 private const val STOP_GAP_DP = 28f
-/** Live vehicles on the cards' services: refresh interval, and fixes older than this are hidden */
+/** Live vehicles on the selected route: refresh interval, and fixes older than this are hidden */
 private const val VEHICLE_REFRESH_MS = 10_000L
 private const val VEHICLE_MAX_AGE_S = 600
 
@@ -90,6 +90,8 @@ fun NearbyStopsMapView(
     userLat: Double?,
     userLon: Double?,
     userAccuracyM: Float? = null,
+    hasLocationPermission: Boolean = true,
+    onRequestLocation: () -> Unit = {},
     onAddStops: (List<Stop>) -> Unit,
     onDepartureClick: ((Departure) -> Unit)? = null,
     /** Shown at the end of the bottom panel's list (the save prompt) */
@@ -107,39 +109,38 @@ fun NearbyStopsMapView(
     val heading by rememberCompassHeading()
     // The map follows you until you pan it; the re-centre button turns following back on
     var following by remember { mutableStateOf(true) }
-    // Next departures for the nearby stops, shown as one card per mode along the bottom
+    // Next departures nearby: each route + direction at its stop nearest you
     var nearbyDeps by remember { mutableStateOf<List<Departure>>(emptyList()) }
-    // The stop whose card was tapped once: highlighted on the map; a second tap opens it
-    var focusedGroupId by remember { mutableStateOf<String?>(null) }
-    // Zoom before a paired card zoomed in, so it can be undone
-    val zoomBeforeFocus = remember { mutableStateOf<Double?>(null) }
-    fun restoreZoom(centre: GeoPoint? = null) {
-        val z = zoomBeforeFocus.value ?: return
-        zoomBeforeFocus.value = null
-        val map = mapRef.value ?: return
-        map.controller.animateTo(centre ?: map.mapCenter as GeoPoint, z, 500L)
-    }
+    // The panel row tapped once: its stop, route and live vehicles on the map; a second tap opens the stop
+    var selectedKey by remember { mutableStateOf<String?>(null) }
     // When the map was last dragged; refreshes wait until it settles
     val lastPanMs = remember { longArrayOf(0L) }
     val lastStopsFetch = remember { mutableStateOf<GeoPoint?>(null) }
-    // When departures last arrived; the cards dim if refreshes keep failing
+    // When departures last arrived; the panel dims if refreshes keep failing
     var depsUpdatedMs by remember { mutableLongStateOf(0L) }
     // Rebuilt every 15 s too, so a service that has just left drops off without waiting for a fetch
-    var cardsTick by remember { mutableIntStateOf(0) }
-    LaunchedEffect(Unit) { while (true) { delay(15_000); cardsTick++ } }
-    val modeCards = remember(stopGroups, nearbyDeps, userLat, userLon, cardsTick) {
-        buildModeCards(stopGroups, nearbyDeps, userLat, userLon)
-    }
-    val nearbyStops = remember(stopGroups, nearbyDeps, userLat, userLon, cardsTick) {
-        buildNearbyStops(stopGroups, nearbyDeps, userLat, userLon)
+    var rowsTick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) { while (true) { delay(15_000); rowsTick++ } }
+    val routes = remember(stopGroups, nearbyDeps, rowsTick) { buildNearbyRoutes(stopGroups, nearbyDeps) }
+    val selectedRoute = routes.find { it.key == selectedKey }
+    val focusedGroupId = selectedRoute?.group?.id
+    // The panel's peek rows: the nearest route of each mode
+    val peekGroupIds = remember(routes) { routes.groupBy { it.mode }.values.map { it.first().group.id }.toSet() }
+    val panelState = when {
+        !hasLocationPermission -> HomePanelState.NoLocation
+        userLat == null || userLon == null -> HomePanelState.Loading
+        !inSeq(userLat, userLon) -> HomePanelState.OutsideSeq
+        routes.isNotEmpty() -> HomePanelState.Ready
+        depsUpdatedMs == 0L -> HomePanelState.Loading
+        else -> HomePanelState.NothingNearby
     }
     // Zoomed out, stops that would sit on top of each other thin out (a dozen dots round a city
-    // station); the cards' stops and the focused one always stay. Zoom tracked to a quarter level.
+    // station); the panel's top stops and the selected one always stay. Zoom tracked to a quarter level.
     var mapZoom by remember { mutableDoubleStateOf(DEFAULT_ZOOM) }
-    val shownStops = remember(stopGroups, modeCards, focusedGroupId, mapZoom, userLat, userLon) {
+    val shownStops = remember(stopGroups, peekGroupIds, focusedGroupId, mapZoom, userLat, userLon) {
         if (mapZoom >= ALL_STOPS_ZOOM) stopGroups
         else {
-            val keep = modeCards.flatMap { c -> c.groups.map { it.id } }.toSet() + listOfNotNull(focusedGroupId)
+            val keep = peekGroupIds + listOfNotNull(focusedGroupId)
             val lat = userLat ?: BRISBANE_LAT
             val metersPerPx = 40_075_016.686 * cos(Math.toRadians(lat)) / (TileSystem.getTileSize() * 2.0.pow(mapZoom))
             declutterStops(stopGroups, keep, userLat, userLon, STOP_GAP_DP * context.resources.displayMetrics.density * metersPerPx)
@@ -163,13 +164,15 @@ fun NearbyStopsMapView(
         mapRef.value?.invalidate()
     }
 
-    // Fetch nearby stops on the first fix, then only after moving a fair way
+    // Fetch nearby stops on the first fix, then only after moving a fair way. No fix, no stops:
+    // showing the CBD's departures as if you were there would mislead.
     LaunchedEffect(userLat, userLon) {
-        val lat = userLat ?: BRISBANE_LAT
-        val lon = userLon ?: BRISBANE_LON
+        val lat = userLat ?: return@LaunchedEffect
+        val lon = userLon ?: return@LaunchedEffect
+        if (!inSeq(lat, lon)) return@LaunchedEffect
         val last = lastStopsFetch.value
         if (last != null && approxMeters(last.latitude, last.longitude, lat, lon) < REFETCH_STOPS_AFTER_M) return@LaunchedEffect
-        runCatching { api.stopsNearMe(lat, lon, radius = 500) }
+        runCatching { api.stopsNearMe(lat, lon, radius = 500, farRadius = FAR_RADIUS_M) }
             .onSuccess { stops ->
                 lastStopsFetch.value = GeoPoint(lat, lon)
                 stopGroups = groupStops(stops)
@@ -183,23 +186,34 @@ fun NearbyStopsMapView(
             .distinct().take(MAX_CALLOUT_STOPS)
     }
     LaunchedEffect(stopCodes) {
-        if (stopCodes.isEmpty()) { nearbyDeps = emptyList(); return@LaunchedEffect }
+        if (stopCodes.isEmpty()) {
+            nearbyDeps = emptyList()
+            if (lastStopsFetch.value != null) depsUpdatedMs = System.currentTimeMillis()
+            return@LaunchedEffect
+        }
+        // Distances from where the stops were fetched, so the API's nearest-stop choice (and the
+        // panel's order) only changes when the stops do
+        val from = lastStopsFetch.value
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (true) {
                 while (System.currentTimeMillis() - lastPanMs[0] < PAN_SETTLE_MS) delay(PAN_SETTLE_MS)
-                runCatching { api.departures(stopCodes.joinToString(","), perStop = MODE_CARD_ROWS, withHeading = 1) }
+                runCatching {
+                    api.departures(stopCodes.joinToString(","), withHeading = 1,
+                        perRoute = ROUTE_ROW_TIMES, lat = from?.latitude, lon = from?.longitude)
+                }
                     .onSuccess { nearbyDeps = it; depsUpdatedMs = System.currentTimeMillis() }
                 delay(CALLOUT_REFRESH_MS)
             }
         }
     }
 
-    // The whole route of each card service. Shapes depend only on the timetable, so each is
-    // fetched once (shapeId -> points; empty when the API had none) and kept for the session.
+    // The selected row's whole route and the live vehicles on its next services. Nothing is
+    // drawn until a row is tapped: lines redrawn whenever the next bus changed were dizzying.
+    // Shapes depend only on the timetable, so each is fetched once and kept for the session.
     val routePaths = remember { RoutePathsOverlay(context.resources.displayMetrics.density) }
     val shapeCache = remember { mutableStateMapOf<String, List<GeoPoint>>() }
-    val drawn = remember(modeCards) { pathDepartures(modeCards) }
-    val missingShapes = drawn.mapNotNull { it.second.shapeId }.filter { it !in shapeCache }.toSet()
+    val drawn = selectedRoute?.departures.orEmpty()
+    val missingShapes = drawn.take(1).mapNotNull { it.shapeId }.filter { it !in shapeCache }.toSet()
     LaunchedEffect(missingShapes) {
         if (missingShapes.isEmpty()) return@LaunchedEffect
         runCatching { api.shapes(missingShapes.joinToString(",")) }
@@ -207,11 +221,10 @@ fun NearbyStopsMapView(
                 for (id in missingShapes) shapeCache[id] = r.shapes[id].orEmpty().map { GeoPoint(it[0], it[1]) }
             }
     }
-    LaunchedEffect(drawn, shapeCache.size, focusedGroupId) {
-        routePaths.paths = drawn.mapNotNull { (card, dep) ->
-            val points = shapeCache[dep.shapeId]?.takeIf { it.size >= 2 } ?: return@mapNotNull null
-            RoutePath(points, dep.routeColorInt ?: dep.mode.pinColorInt(), dimmed = focusedGroupId != null && card.group.id != focusedGroupId)
-        }
+    LaunchedEffect(selectedRoute?.first?.shapeId, shapeCache.size) {
+        routePaths.paths = listOfNotNull(selectedRoute?.first?.let { dep ->
+            shapeCache[dep.shapeId]?.takeIf { it.size >= 2 }?.let { RoutePath(it, dep.routeColorInt ?: dep.mode.pinColorInt(), dimmed = false) }
+        })
         mapRef.value?.invalidate()
     }
 
@@ -219,7 +232,7 @@ fun NearbyStopsMapView(
     // opens its trip.
     val vehicleLayer = remember { FolderOverlay() }
     var liveVehicles by remember { mutableStateOf<List<LiveTripVehicle>>(emptyList()) }
-    val drawnTripIds = remember(drawn) { drawn.map { it.second.tripId }.distinct() }
+    val drawnTripIds = drawn.map { it.tripId }.distinct()
     LaunchedEffect(drawnTripIds) {
         if (drawnTripIds.isEmpty()) { liveVehicles = emptyList(); return@LaunchedEffect }
         pollWhileVisible(VEHICLE_REFRESH_MS) {
@@ -227,13 +240,13 @@ fun NearbyStopsMapView(
                 .onSuccess { liveVehicles = it.vehicles }
         }
     }
-    LaunchedEffect(liveVehicles, drawn, focusedGroupId) {
+    LaunchedEffect(liveVehicles, selectedKey) {
         val map = mapRef.value ?: return@LaunchedEffect
         vehicleLayer.items.clear()
         for (v in liveVehicles) {
             // A fix this old is a vehicle parked before its trip, not on its way
             if ((v.ageSeconds ?: 0) > VEHICLE_MAX_AGE_S) continue
-            val (card, dep) = drawn.find { it.second.tripId == v.tripId } ?: continue
+            val dep = drawn.find { it.tripId == v.tripId } ?: continue
             val color = dep.routeColorInt ?: dep.mode.pinColorInt()
             val marker = Marker(map).apply {
                 position = GeoPoint(v.lat, v.lon)
@@ -246,11 +259,7 @@ fun NearbyStopsMapView(
                         ?: if (androidx.core.graphics.ColorUtils.calculateLuminance(color) > 0.5) AndroidColor.BLACK else AndroidColor.WHITE,
                     heading = if (v.headingKnown && !v.isStale) v.heading.toFloat() else null
                 )
-                alpha = when {
-                    focusedGroupId != null && card.group.id != focusedGroupId -> 0.35f
-                    v.isStale -> 0.45f
-                    else -> 1f
-                }
+                if (v.isStale) alpha = 0.45f
                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                 setInfoWindow(null)
                 setOnMarkerClickListener { _, _ -> onDepartureClick?.invoke(dep); true }
@@ -275,7 +284,7 @@ fun NearbyStopsMapView(
     }
 
     // Rebuild overlays whenever stops or live trip data changes
-    LaunchedEffect(shownStops, tripLiveData, focusedGroupId, modeCards.map { c -> c.sides.map { it.group.id to it.heading } }) {
+    LaunchedEffect(shownStops, tripLiveData, focusedGroupId, selectedRoute?.first?.heading, peekGroupIds) {
         val map = mapRef.value ?: return@LaunchedEffect
         val dp = context.resources.displayMetrics.density
         map.overlays.clear()
@@ -339,22 +348,18 @@ fun NearbyStopsMapView(
             }
         }
 
-        // Where the cards' next services go, and the vehicles on them, under you and the stops
+        // The selected route and its vehicles, under you and the stops
         map.overlays.add(routePaths)
         map.overlays.add(vehicleLayer)
 
         // You, under the stops so they stay tappable
         map.overlays.add(youOverlay)
 
-        // Stop names: the focused stop and the mode-card stops always, the rest once zoomed in.
-        // The far side of a paired card shares its partner's name, so it gets no label of its own.
-        val cardStops = modeCards.map { it.group.id }.toSet()
-        val farSides = modeCards.flatMap { c -> c.sides.drop(1).map { it.group.id } }.toSet()
-        val focusedCard = modeCards.find { it.group.id == focusedGroupId }
-        val focusedHeadings: Map<String, Int?> = focusedCard?.sides?.associate { it.group.id to it.heading }
-            ?: listOfNotNull(focusedGroupId).associateWith { null }
+        // Stop names: the selected stop and the panel's top stops always, the rest once zoomed in
+        val cardStops = peekGroupIds
+        val focusedHeadings: Map<String, Int?> = listOfNotNull(focusedGroupId).associateWith { selectedRoute?.first?.heading }
         map.overlays.add(StopLabelsOverlay(
-            shownStops.filter { it.id !in farSides }.map { g ->
+            shownStops.map { g ->
                 StopLabel(
                     stopId = g.id,
                     text = mapStopName(g.name),
@@ -423,30 +428,21 @@ fun NearbyStopsMapView(
                 }
             },
             sheetContent = {
-                HomeSheetContent(
-                    cards = modeCards,
-                    stops = nearbyStops,
-                    focusedGroupId = focusedGroupId,
+                HomePanel(
+                    state = panelState,
+                    routes = routes,
+                    selectedKey = selectedKey,
                     updatedAtMs = depsUpdatedMs,
-                    onCardTap = { card ->
-                        if (focusedGroupId == card.group.id) {
-                            // Both sides of the road in one sheet
-                            selectedGroupState.value = card.asOneGroup()
+                    onRouteTap = { r ->
+                        if (selectedKey == r.key) {
+                            selectedGroupState.value = r.group
                         } else {
-                            focusedGroupId = card.group.id
+                            selectedKey = r.key
                             following = false
-                            // Centre between the sides, so both highlighted dots are in view; zoom in on a
-                            // pair, whose stops are often only ~40 m apart and would overlap
-                            val centre = GeoPoint(card.groups.map { it.latitude }.average(), card.groups.map { it.longitude }.average())
-                            val map = mapRef.value
-                            if (card.sides.size > 1 && map != null && map.zoomLevelDouble < PAIR_FOCUS_ZOOM) {
-                                if (zoomBeforeFocus.value == null) zoomBeforeFocus.value = map.zoomLevelDouble
-                                map.controller.animateTo(centre, PAIR_FOCUS_ZOOM, 600L)
-                            } else if (zoomBeforeFocus.value != null) restoreZoom(centre)
-                            else map?.controller?.animateTo(centre)
+                            mapRef.value?.controller?.animateTo(GeoPoint(r.group.latitude, r.group.longitude))
                         }
                     },
-                    onStopTap = { selectedGroupState.value = it },
+                    onRequestLocation = onRequestLocation,
                     onPeekHeight = { peekPx = it },
                     footer = sheetFooter,
                     modifier = Modifier.heightIn(max = sheetMax)
@@ -490,9 +486,8 @@ fun NearbyStopsMapView(
                 SmallFloatingActionButton(
                     onClick = {
                         following = true
-                        // Back to you at the normal zoom, whatever was focused or zoomed
-                        focusedGroupId = null
-                        zoomBeforeFocus.value = null
+                        // Back to you at the normal zoom, whatever was selected
+                        selectedKey = null
                         youOverlay.position?.let { mapRef.value?.controller?.animateTo(it, DEFAULT_ZOOM, 600L) }
                     },
                     containerColor = ComposeColor(0xFF22272E),
@@ -515,8 +510,6 @@ fun NearbyStopsMapView(
         ModalBottomSheet(
             onDismissRequest = {
                 selectedGroupState.value = null
-                // Done with that stop: undo the focus zoom
-                if (zoomBeforeFocus.value != null) { focusedGroupId = null; restoreZoom() }
             },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
         ) {

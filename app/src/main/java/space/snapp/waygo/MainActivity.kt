@@ -203,6 +203,13 @@ fun WayGoApp(
                     userLat = userLat,
                     userLon = userLon,
                     userAccuracyM = userAccuracy,
+                    hasLocationPermission = hasLocationPermission || fakeLocation != null,
+                    onRequestLocation = {
+                        permissionLauncher.launch(arrayOf(
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            Manifest.permission.ACCESS_COARSE_LOCATION
+                        ))
+                    },
                     networkAlertsVM = networkAlertsVM,
                     onTripSelected = { tripDetailArgs = it }
                 )
