@@ -31,6 +31,11 @@ data class ItineraryLeg(
     val steps: List<ItineraryStep>
 ) {
     val isTransit: Boolean get() = mode in listOf("BUS", "RAIL", "TRAM", "FERRY", "SUBWAY", "TRANSIT")
+
+    /** The leg's badge: route number, except trains, whose short names are internal codes ("CAIP") */
+    val label: String
+        get() = if (mode == "RAIL") headsign?.removeSuffix(" station")?.removeSuffix(" Station") ?: "Train"
+            else routeShortName ?: mode
     val durationMins: Int get() = duration / 60
 }
 
@@ -45,6 +50,13 @@ data class Itinerary(
     val durationMins: Int get() = duration / 60
     val transitLegs: List<ItineraryLeg> get() = legs.filter { it.isTransit }
 }
+
+/**
+ * "Arrive first": soonest arrival; trips arriving in the same minute go fewest changes first,
+ * then leaving later (a bus hop and a change that only gets you to the same 412 isn't better)
+ */
+val ArriveFirstOrder: Comparator<Itinerary> =
+    compareBy<Itinerary>({ it.endTime / 60_000 }, { it.transfers }, { -it.startTime })
 
 data class PlanResponse(
     val itineraries: List<Itinerary>

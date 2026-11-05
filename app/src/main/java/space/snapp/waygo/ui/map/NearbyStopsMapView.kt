@@ -67,6 +67,8 @@ private const val PAN_SETTLE_MS = 1_500L
 private const val MAX_CALLOUT_STOPS = 45
 /** Trains and ferries are looked for this far away (about a 15 minute walk); buses within 500 m */
 private const val FAR_RADIUS_M = 1200
+/** With nothing at all within those, the nearest stops this far away (Pullenvale: 1.9 km) */
+private const val WIDE_RADIUS_M = 3000
 /** Refetch nearby stops only after moving this far (GPS updates every 10 s) */
 private const val REFETCH_STOPS_AFTER_M = 150.0
 /** Starting zoom, and where the re-centre button returns to */
@@ -127,7 +129,7 @@ fun NearbyStopsMapView(
     val selectedRoute = routes.find { it.key == selectedKey }
     val focusedGroupId = selectedRoute?.group?.id
     // The panel's peek rows: the nearest route of each mode
-    val peekGroupIds = remember(routes) { routes.groupBy { it.mode }.values.map { it.first().group.id }.toSet() }
+    val peekGroupIds = remember(routes) { peekRoutes(routes).map { it.group.id }.toSet() }
     val panelState = when {
         !hasLocationPermission -> HomePanelState.NoLocation
         userLat == null || userLon == null -> HomePanelState.Loading
@@ -174,10 +176,16 @@ fun NearbyStopsMapView(
         if (!inSeq(lat, lon)) return@LaunchedEffect
         val last = lastStopsFetch.value
         if (last != null && approxMeters(last.latitude, last.longitude, lat, lon) < REFETCH_STOPS_AFTER_M) return@LaunchedEffect
-        runCatching { api.stopsNearMe(lat, lon, radius = 500, farRadius = FAR_RADIUS_M) }
+        runCatching {
+            // Semi-rural streets can be kilometres from a stop: look wider rather than show nothing
+            api.stopsNearMe(lat, lon, radius = 500, farRadius = FAR_RADIUS_M)
+                .ifEmpty { api.stopsNearMe(lat, lon, radius = WIDE_RADIUS_M) }
+        }
             .onSuccess { stops ->
                 lastStopsFetch.value = GeoPoint(lat, lon)
                 stopGroups = groupStops(stops)
+                // No stops at all: nothing will fetch departures, so end the "finding" state here
+                if (stops.isEmpty()) { nearbyDeps = emptyList(); depsUpdatedMs = System.currentTimeMillis() }
             }
     }
 
@@ -419,6 +427,11 @@ fun NearbyStopsMapView(
     // below resting "hides" it, which is caught here and turned into the lower peek.
     var lowered by remember { mutableStateOf(false) }
     val peekHeight = SheetHandleHeight + with(density) { (if (lowered && headerPx > 0) headerPx else peekPx).toDp() }
+    // Centre the map in the part you can see, above the panel, so you aren't under it
+    val peekHeightPx = with(density) { peekHeight.roundToPx() }
+    LaunchedEffect(peekHeightPx) {
+        mapRef.value?.apply { setMapCenterOffset(0, -peekHeightPx / 2); invalidate() }
+    }
     val scaffoldState = rememberBottomSheetScaffoldState(
         bottomSheetState = rememberStandardBottomSheetState(skipHiddenState = false)
     )

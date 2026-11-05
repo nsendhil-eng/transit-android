@@ -42,6 +42,7 @@ import androidx.compose.foundation.Canvas
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 import space.snapp.waygo.data.api.models.AddressResult
+import space.snapp.waygo.data.api.models.ArriveFirstOrder
 import space.snapp.waygo.data.api.models.Itinerary
 import space.snapp.waygo.data.api.models.ItineraryLeg
 import space.snapp.waygo.ui.plan.PlanViewModel.ActiveField
@@ -321,7 +322,7 @@ fun PlanCard(
                     // pick. "Fastest" (shortest ride) can leave later and still arrive after it.
                     var sort by remember { mutableStateOf(PlanSort.ArriveFirst) }
                     val sorted = when (sort) {
-                        PlanSort.ArriveFirst -> itineraries.sortedBy { it.endTime }
+                        PlanSort.ArriveFirst -> itineraries.sortedWith(ArriveFirstOrder)
                         PlanSort.Fastest -> itineraries.sortedBy { it.duration }
                         PlanSort.LeastWalking -> itineraries.sortedBy { it.walkDistance }
                     }
@@ -537,21 +538,19 @@ private fun ItineraryTimelineBar(itinerary: Itinerary, window: TimeWindow) {
                     modifier = Modifier
                         .align(Alignment.CenterStart)
                         .offset(x = x)
-                        .width(legWidth.coerceAtLeast(8.dp))
+                        // A short ride still gets room for its route number, over the walk beside it
+                        .width(legWidth.coerceAtLeast(30.dp))
                         .fillMaxHeight()
                 ) {
-                    // Only label pills wide enough to hold a route number
-                    if (legWidth >= 28.dp) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                leg.routeShortName ?: leg.mode,
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                                leg.label,
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                 color = if (bg.luminance() > 0.6f) Color.Black else Color.White,
                                 maxLines = 1,
                                 softWrap = false,
                                 overflow = TextOverflow.Clip
                             )
-                        }
                     }
                 }
             } else {
@@ -615,7 +614,7 @@ private fun LegRow(leg: ItineraryLeg) {
                 } ?: MaterialTheme.colorScheme.primary
                 Surface(color = bgColor, shape = RoundedCornerShape(6.dp)) {
                     Text(
-                        leg.routeShortName ?: leg.mode,
+                        leg.label,
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                         color = Color.White,
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)

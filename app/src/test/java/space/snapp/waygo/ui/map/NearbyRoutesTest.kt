@@ -97,6 +97,31 @@ class NearbyRoutesTest {
     }
 
     @Test
+    fun `resting rows pick the route leaving soonest among those about as close as the nearest`() {
+        // Chermside-style interchange: platform B is nearest but its 338 leaves in 40 min; the 333
+        // goes in 1 min from platform A, 30 m further. Milton's 375 is 360 m further still.
+        val platB = stop("1", "Chermside bus station, platform B", -27.3855, 153.0311, 20.0,
+            parent = "place_chmbus", parentName = "Chermside bus station")
+        val platA = stop("2", "Chermside bus station, platform A", -27.3856, 153.0312, 50.0,
+            parent = "place_chmbus", parentName = "Chermside bus station")
+        val far = stop("3", "Gympie Rd at Kittyhawk Dr, stop 12", -27.3880, 153.0330, 380.0)
+        val routes = buildNearbyRoutes(groupStops(listOf(platB, platA, far)), listOf(
+            dep("1", "338", 0, 40), dep("2", "333", 0, 1), dep("3", "375", 0, 0)
+        ))
+        assertEquals(listOf("338", "333", "375"), routes.map { it.first.routeNumber })   // full list: by distance
+        assertEquals(listOf("333"), peekRoutes(routes).map { it.first.routeNumber })     // resting row: soonest close by
+    }
+
+    @Test
+    fun `a lettered platform in a station is a bus station even without busway in its name`() {
+        val cc = stop("1832", "Cultural Centre, platform 1", -27.4730, 153.0205, 120.0,
+            parent = "place_cultbs", parentName = "Cultural Centre station")
+        val row = buildNearbyRoutes(groupStops(listOf(cc)), listOf(dep("1832", "60", 0, 9).copy(platformCode = "1"))).single()
+        assertTrue(row.isBusStation)
+        assertEquals("Cultural Centre station · platform 1", row.stopLabel)
+    }
+
+    @Test
     fun `stop numbers tell the two sides of a road apart`() {
         assertEquals("9", stopNumber("Coronation Dr at Wesley Hospital, stop 9"))
         assertEquals("132", stopNumber("Wickham Terrace Stop 132 near Albert St"))

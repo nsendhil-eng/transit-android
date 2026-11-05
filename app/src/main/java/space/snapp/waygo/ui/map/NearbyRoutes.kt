@@ -34,10 +34,15 @@ data class NearbyRoute(
 ) {
     val first: Departure get() = departures.first()
 
-    /** A platform in a bus station or busway (King George Square, Roma Street): reached via its entrances */
+    /**
+     * A platform in a bus station or busway (King George Square, Roma Street, Cultural Centre):
+     * reached via its entrances. Lettered platforms give it away even when the station's name
+     * doesn't ("Cultural Centre station"); a train station's street bus bays have none.
+     */
     val isBusStation: Boolean
         get() = mode == VehicleType.Bus && stop?.parentStation?.isNotBlank() == true &&
-            stop.parentStationName?.let { it.contains("bus station", true) || it.contains("busway", true) } == true
+            (!first.platformCode.isNullOrBlank() ||
+                stop.parentStationName?.let { it.contains("bus station", true) || it.contains("busway", true) } == true)
 
     val walkMinutes: Int
         get() {
@@ -99,3 +104,20 @@ fun buildNearbyRoutes(groups: List<StopGroup>, departures: List<Departure>): Lis
             { it.first.headsign }
         ))
 }
+
+/** A route this much further away than the nearest of its mode still counts as "right here" */
+private const val PEEK_EXTRA_M = 160.0
+
+/**
+ * The panel's resting rows, one per mode: of the routes about as close as the nearest one
+ * (within PEEK_EXTRA_M, roughly a 2 minute walk more), the one leaving soonest. At a bus
+ * interchange the nearest platform's route might not leave for 40 minutes while another goes in
+ * one. Modes in order of their nearest route. The full list keeps its stable distance order.
+ */
+fun peekRoutes(routes: List<NearbyRoute>): List<NearbyRoute> =
+    routes.groupBy { it.mode }.values
+        .sortedBy { list -> list.minOf { it.distanceM } }
+        .map { list ->
+            val nearest = list.minOf { it.distanceM }
+            list.filter { it.distanceM <= nearest + PEEK_EXTRA_M }.minBy { it.first.liveSeconds }
+        }

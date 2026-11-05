@@ -28,6 +28,9 @@ import space.snapp.waygo.data.api.models.Departure
 import space.snapp.waygo.data.api.models.VehicleType
 import space.snapp.waygo.ui.components.icon
 
+/** Beyond this walk the panel says nothing is close */
+private const val FAR_WALK_MIN = 10
+
 /** Two missed 30 s refreshes */
 private const val STALE_AFTER_MS = 75_000L
 
@@ -73,7 +76,12 @@ fun HomePanel(
 
     // Modes in order of their nearest route; each mode's routes nearest first (already sorted)
     val byMode = remember(routes) { routes.groupBy { it.mode }.entries.sortedBy { (_, r) -> r.first().distanceM } }
-    val peek = byMode.map { it.value.first() }
+    val peek = remember(routes) { peekRoutes(routes) }
+    val peekKeys = peek.map { it.key }.toSet()
+    // Nothing within a 10 minute walk (semi-rural streets): say so, and what's nearest
+    val nearestRoute = routes.minByOrNull { it.distanceM }
+    val farNote = nearestRoute?.takeIf { it.walkMinutes > FAR_WALK_MIN }
+        ?.let { "No stops within a $FAR_WALK_MIN min walk · nearest: ${it.stopLabel}, ${it.walkMinutes} min walk" }
 
     Column(modifier) {
         Column(Modifier.onSizeChanged { onPeekHeight(it.height) }) {
@@ -90,8 +98,11 @@ fun HomePanel(
                 )
                 HomePanelState.OutsideSeq -> Message("WayGo covers South East Queensland. Nothing nearby to show here.")
                 HomePanelState.Loading -> Message("Finding what's leaving near you…")
-                HomePanelState.NothingNearby -> Message("Nothing leaving within a 15 minute walk right now.")
+                HomePanelState.NothingNearby -> Message("No stops or services within 3 km right now. Try Where to? for the best way out.")
                 HomePanelState.Ready -> Column(Modifier.alpha(if (staleMin != null) 0.5f else 1f)) {
+                    farNote?.let {
+                        Text(it, fontSize = 12.sp, color = LateAmber, modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 4.dp))
+                    }
                     for (r in peek) RouteRow(r, selected = r.key == selectedKey, now = now, onTap = { onRouteTap(r) })
                     if (routes.size > peek.size) {
                         Text("${routes.size - peek.size} more routes nearby · drag up", fontSize = 11.sp, color = Muted,
@@ -106,7 +117,7 @@ fun HomePanel(
         LazyColumn(Modifier.weight(1f, fill = false)) {
             if (state == HomePanelState.Ready) {
                 for ((mode, all) in byMode) {
-                    val list = all.drop(1)
+                    val list = all.filter { it.key !in peekKeys }
                     if (list.isEmpty()) continue
                     item(key = "h-$mode") {
                         Text(modeHeading(mode, list.size), style = MaterialTheme.typography.labelLarge, color = Muted,

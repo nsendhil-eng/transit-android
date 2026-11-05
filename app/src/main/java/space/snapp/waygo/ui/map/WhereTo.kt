@@ -85,6 +85,8 @@ private fun PlaceChip(place: FavoritePlace, userLat: Double?, userLon: Double?, 
     val api = remember { TransitApiService.instance }
     var eta by remember(place.id) { mutableStateOf<Eta?>(null) }
     var loading by remember(place.id) { mutableStateOf(false) }
+    // Asked and answered with no trip (outside SEQ, nothing running): don't spin forever
+    var noTrip by remember(place.id) { mutableStateOf(false) }
     // Refetch on open, every couple of minutes, and after moving ~300 m; never in the background
     val cellLat = userLat?.let { (it / ETA_MOVE_STEP).roundToInt() }
     val cellLon = userLon?.let { (it / ETA_MOVE_STEP).roundToInt() }
@@ -93,7 +95,7 @@ private fun PlaceChip(place: FavoritePlace, userLat: Double?, userLon: Double?, 
         val lon = userLon ?: return@LaunchedEffect
         pollWhileVisible(ETA_REFRESH_MS) {
             loading = true
-            runCatching { api.eta(lat, lon, place.lat, place.lon) }.onSuccess { eta = it.eta }
+            runCatching { api.eta(lat, lon, place.lat, place.lon) }.onSuccess { eta = it.eta; noTrip = it.eta == null }
             loading = false
         }
     }
@@ -104,7 +106,11 @@ private fun PlaceChip(place: FavoritePlace, userLat: Double?, userLon: Double?, 
             Column {
                 Text(place.name, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                 Text(
-                    eta?.let { etaChipText(it) } ?: if (loading || userLat != null) "…" else "Tap to plan",
+                    eta?.let { etaChipText(it) } ?: when {
+                        noTrip -> "No trip found"
+                        loading || userLat != null -> "…"
+                        else -> "Tap to plan"
+                    },
                     fontSize = 11.sp, color = Muted, maxLines = 1
                 )
             }
@@ -132,12 +138,19 @@ private fun placeIcon(name: String) = when {
 /** A walk this short means you're already there */
 private const val HERE_MAX_MIN = 2
 
-/** "34 min · leave now · 412", "34 min · leave in 3 · 412", "12 min walk", "You're here" */
+/** Walking beyond this is part of the answer, not a detail ("25 min walk + 444") */
+private const val LONG_WALK_MIN = 10
+
+/**
+ * "34 min · leave now · 412", "34 min · leave in 3 · 412", "59 min · leave in 3 · 25 min walk + 444",
+ * "12 min walk", "You're here"
+ */
 fun etaChipText(eta: Eta): String {
     if (eta.walkOnly) return if (eta.minutes <= HERE_MAX_MIN) "You're here" else "${eta.minutes} min walk"
     val leave = if (eta.leaveInMinutes <= 0) "leave now" else "leave in ${eta.leaveInMinutes}"
     val route = eta.firstLeg?.let { leg -> leg.route?.takeIf { leg.mode != "RAIL" } ?: modeWord(leg.mode) }
-    return listOfNotNull("${eta.minutes} min", leave, route).joinToString(" · ")
+    val catch = if (eta.walkMinutes > LONG_WALK_MIN && route != null) "${eta.walkMinutes} min walk + $route" else route
+    return listOfNotNull("${eta.minutes} min", leave, catch).joinToString(" · ")
 }
 
 private fun modeWord(mode: String) = when (mode) { "RAIL" -> "train"; "FERRY" -> "ferry"; "TRAM" -> "tram"; else -> "bus" }

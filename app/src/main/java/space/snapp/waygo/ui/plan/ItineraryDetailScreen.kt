@@ -260,7 +260,7 @@ private fun TimelineLegRow(leg: ItineraryLeg, isLast: Boolean) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Surface(color = legColor, shape = RoundedCornerShape(6.dp)) {
                         Text(
-                            leg.routeShortName ?: leg.mode,
+                            leg.label,
                             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                             color = Color.White,
                             maxLines = 1,

@@ -6,8 +6,8 @@ import space.snapp.waygo.data.api.models.Eta
 import space.snapp.waygo.data.api.models.EtaLeg
 
 class EtaChipTextTest {
-    private fun eta(minutes: Int, leaveIn: Int, mode: String? = "BUS", route: String? = "412") = Eta(
-        minutes = minutes, leaveInMinutes = leaveIn, departAt = "", arriveAt = "", walkMinutes = 5, transfers = 0,
+    private fun eta(minutes: Int, leaveIn: Int, mode: String? = "BUS", route: String? = "412", walk: Int = 5) = Eta(
+        minutes = minutes, leaveInMinutes = leaveIn, departAt = "", arriveAt = "", walkMinutes = walk, transfers = 0,
         walkOnly = mode == null,
         firstLeg = mode?.let { EtaLeg(it, route, "City", null, null, "Wesley Hospital, stop 9", "", true) }
     )
@@ -20,5 +20,7 @@ class EtaChipTextTest {
         assertEquals("22 min · leave in 6 · train", etaChipText(eta(22, 6, mode = "RAIL", route = "IPCA")))
         assertEquals("12 min walk", etaChipText(eta(12, 0, mode = null)))
         assertEquals("You're here", etaChipText(eta(0, 0, mode = null)))
+        // A long walk first (Pullenvale) is part of the answer
+        assertEquals("59 min · leave in 3 · 25 min walk + 444", etaChipText(eta(59, 3, route = "444", walk = 25)))
     }
 }
