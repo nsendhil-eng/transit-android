@@ -15,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -86,7 +87,8 @@ fun ItineraryDetailScreen(
 
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // Map with header overlay
-        Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+        // Clipped: osmdroid draws past the edge of its view, under the timeline below
+        Box(modifier = Modifier.fillMaxWidth().weight(1f).clipToBounds()) {
             AndroidView(
                 factory = { ctx ->
                     MapView(ctx).apply {
