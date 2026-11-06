@@ -21,25 +21,35 @@ class HomeSnapshotTest {
     private val savedAt = 1_000_000_000L
     private val snapshot = HomeSnapshot(savedAt, -27.4806, 152.9965, listOf(stop), listOf(dep))
 
+    private fun fix(lat: Double = -27.4806, lon: Double = 152.9965, at: Long = savedAt) = UserFix(lat, lon, timeMs = at)
+
     @Test
     fun `a recent view from here can be used`() {
-        assertTrue(snapshot.usableAt(-27.4806, 152.9965, savedAt + 14 * 60_000L))
+        val now = savedAt + 2 * 60_000L
+        assertTrue(snapshot.usableAt(fix(at = now), now))
     }
 
     @Test
-    fun `a view over 15 minutes old cannot`() {
-        assertFalse(snapshot.usableAt(-27.4806, 152.9965, savedAt + 15 * 60_000L))
+    fun `a view over 3 minutes old cannot`() {
+        val now = savedAt + 3 * 60_000L
+        assertFalse(snapshot.usableAt(fix(at = now), now))
     }
 
     @Test
     fun `a view saved in the future cannot, if the clock changed`() {
-        assertFalse(snapshot.usableAt(-27.4806, 152.9965, savedAt - 1))
+        assertFalse(snapshot.usableAt(fix(at = savedAt - 1), savedAt - 1))
     }
 
     @Test
-    fun `nor can one from over 150 m away`() {
-        assertTrue(snapshot.usableAt(-27.4806 + 0.001, 152.9965, savedAt)) // ~111 m
-        assertFalse(snapshot.usableAt(-27.4806 + 0.002, 152.9965, savedAt)) // ~223 m
+    fun `nor can one from over 100 m away`() {
+        assertTrue(snapshot.usableAt(fix(lat = -27.4806 + 0.0005), savedAt)) // ~56 m
+        assertFalse(snapshot.usableAt(fix(lat = -27.4806 + 0.001), savedAt)) // ~111 m
+    }
+
+    @Test
+    fun `nor can one checked against an old cached fix, which may be from before you moved`() {
+        val now = savedAt + 60_000L
+        assertFalse(snapshot.usableAt(fix(at = now - 2 * 60_000L), now))
     }
 
     @Test

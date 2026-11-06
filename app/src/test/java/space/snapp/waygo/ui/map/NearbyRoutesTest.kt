@@ -208,4 +208,12 @@ class NearbyRoutesTest {
         val d = dep("1", "412", 0, 8).copy(expectedDepartureUtc = "soon")
         assertEquals(0, d.liveSeconds)
     }
+
+    @Test
+    fun `walk times follow you, while the order stays where the stops were fetched`() {
+        val rows = buildNearbyRoutes(groups, listOf(dep("1951", "412", 0, 3)), walkFromLat = -27.4806 + 0.003, walkFromLon = 152.9965)
+        assertEquals(60.0, rows.single().distanceM, 0.01)
+        assertEquals(334.0, rows.single().walkM, 1.0)
+        assertEquals(6, rows.single().walkMinutes)
+    }
 }

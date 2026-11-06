@@ -10,19 +10,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
-import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.LocationOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import space.snapp.waygo.data.api.models.Departure
@@ -164,7 +161,7 @@ private fun Message(text: String, action: String? = null, onAction: () -> Unit =
 }
 
 /**
- * [412] ↗ City                                   3 min · 11 min
+ * [412] City                                     3 min · 11 min
  *       Wesley Hospital · stop 9 · 🚶 2 min
  */
 @Composable
@@ -187,8 +184,6 @@ private fun RouteRow(
                 Icon(r.mode.icon(), contentDescription = r.mode.label, tint = r.mode.tint, modifier = Modifier.size(15.dp))
                 Spacer(Modifier.width(6.dp))
                 RoutePill(r.first, Modifier.weight(1f, fill = false))
-                Spacer(Modifier.width(4.dp))
-                Arrow(r.first.heading, 13.dp)
                 // Trains: the pill already says where it goes
                 if (r.mode != VehicleType.Rail) {
                     Spacer(Modifier.width(4.dp))
@@ -215,14 +210,6 @@ private fun RouteRow(
                 Text("${r.walkMinutes} min", fontSize = 11.sp, color = Muted)
             }
         }
-    }
-}
-
-/** Which way the service leaves the stop; blank space when unknown so rows line up */
-@Composable
-private fun Arrow(heading: Int?, size: Dp) {
-    Box(Modifier.size(size + 1.dp), contentAlignment = Alignment.Center) {
-        heading?.let { Icon(Icons.Default.ArrowUpward, null, tint = Color.White, modifier = Modifier.size(size).rotate(it.toFloat())) }
     }
 }
 

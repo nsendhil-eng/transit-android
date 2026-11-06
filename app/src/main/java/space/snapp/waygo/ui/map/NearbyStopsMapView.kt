@@ -29,6 +29,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -64,6 +66,8 @@ private const val BRISBANE_LAT = -27.4698
 private const val BRISBANE_LON = 153.0251
 private const val STOP_LIVE_REFRESH_MS = 5_000L
 private const val CALLOUT_REFRESH_MS = 30_000L
+/** Departures this recent aren't refetched on reopening */
+private const val FRESH_DEPARTURES_MS = 20_000L
 private const val PAN_SETTLE_MS = 1_500L
 private const val MAX_CALLOUT_STOPS = 45
 /** Starting zoom, and where the re-centre button returns to */
@@ -86,7 +90,7 @@ private const val VEHICLE_MAX_AGE_S = 600
 fun NearbyStopsMapView(
     userLat: Double?,
     userLon: Double?,
-    userAccuracyM: Float? = null,
+    userFix: UserFix? = null,
     hasLocationPermission: Boolean = true,
     onRequestLocation: () -> Unit = {},
     onAddStops: (List<Stop>) -> Unit,
@@ -131,7 +135,10 @@ fun NearbyStopsMapView(
     // When the map was last dragged; refreshes wait until it settles
     val lastPanMs = remember { longArrayOf(0L) }
     LaunchedEffect(Unit) { while (true) { home.nowMs = System.currentTimeMillis(); delay(15_000) } }
-    val routes = remember(stopGroups, nearbyDeps, home.nowMs) { buildNearbyRoutes(stopGroups, nearbyDeps) }
+    val walkFrom = home.walkFrom
+    val routes = remember(stopGroups, nearbyDeps, home.nowMs, walkFrom) {
+        buildNearbyRoutes(stopGroups, nearbyDeps, walkFrom?.latitude, walkFrom?.longitude)
+    }
     // Time to first rows: "Fully drawn" in logcat on launch, WayGoPerf on every return to this tab
     val composedAtMs = remember { android.os.SystemClock.uptimeMillis() }
     val hasRoutes = routes.isNotEmpty()
@@ -166,10 +173,10 @@ fun NearbyStopsMapView(
     }
 
     // Move the dot (and the map, while following) whenever location changes
-    LaunchedEffect(userLat, userLon, userAccuracyM) {
+    LaunchedEffect(userLat, userLon, userFix?.accuracyM) {
         if (userLat == null || userLon == null) return@LaunchedEffect
         youOverlay.position = GeoPoint(userLat, userLon)
-        youOverlay.accuracyM = userAccuracyM
+        youOverlay.accuracyM = userFix?.accuracyM
         stopLabels.avoid = youOverlay.position
         if (following) mapRef.value?.controller?.animateTo(youOverlay.position)
         mapRef.value?.invalidate()
@@ -182,8 +189,8 @@ fun NearbyStopsMapView(
         }
     }
 
-    LaunchedEffect(userLat, userLon) {
-        home.onLocation(userLat ?: return@LaunchedEffect, userLon ?: return@LaunchedEffect)
+    LaunchedEffect(userFix, home.panelOpen, selectedKey) {
+        userFix?.let { home.onFix(it, home.listHeld(System.currentTimeMillis())) }
     }
 
     // Departures for the nearby stops: every 30 s while the app is in front, never mid-pan.
@@ -195,6 +202,9 @@ fun NearbyStopsMapView(
     LaunchedEffect(stopCodes) {
         if (stopCodes.isEmpty()) return@LaunchedEffect
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            // Reopened within seconds of the last refresh: those times are still good
+            val age = System.currentTimeMillis() - home.depsUpdatedMs
+            if (home.departuresFor == stopCodes && age < FRESH_DEPARTURES_MS) delay(CALLOUT_REFRESH_MS - age)
             home.refreshing = true
             while (true) {
                 while (System.currentTimeMillis() - lastPanMs[0] < PAN_SETTLE_MS) delay(PAN_SETTLE_MS)
@@ -415,6 +425,7 @@ fun NearbyStopsMapView(
     )
     val panelList = rememberLazyListState()
     LaunchedEffect(scaffoldState.bottomSheetState.currentValue) {
+        home.panelOpen = scaffoldState.bottomSheetState.currentValue == SheetValue.Expanded
         // Closed back to resting (or lowered): show its top, "Where to?", not the middle of the list
         if (scaffoldState.bottomSheetState.currentValue != SheetValue.Expanded) panelList.scrollToItem(0)
         when (scaffoldState.bottomSheetState.currentValue) {
@@ -461,7 +472,15 @@ fun NearbyStopsMapView(
                     footer = sheetFooter,
                     header = sheetHeader,
                     listState = panelList,
-                    modifier = Modifier.heightIn(max = sheetMax)
+                    modifier = Modifier.heightIn(max = sheetMax).pointerInput(Unit) {
+                        // Watches touches without taking them: the list holds still while in use
+                        awaitPointerEventScope {
+                            while (true) {
+                                awaitPointerEvent(PointerEventPass.Initial)
+                                home.panelTouchedMs = System.currentTimeMillis()
+                            }
+                        }
+                    }
                 )
             },
             containerColor = ComposeColor.Transparent

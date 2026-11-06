@@ -5,10 +5,8 @@ import space.snapp.waygo.data.api.models.Departure
 import space.snapp.waygo.data.api.models.Stop
 import java.io.File
 
-/** Older than this and the last view says little about what's leaving now */
-private const val SNAPSHOT_MAX_AGE_MS = 15 * 60_000L
-/** Further than this from where it was saved and it's a different set of stops */
-private const val SNAPSHOT_MAX_MOVE_M = 150.0
+/** Predictions move: older than this, the last view could be showing the wrong times */
+private const val SNAPSHOT_MAX_AGE_MS = 3 * 60_000L
 
 /**
  * The home panel's last view, kept on disk so the next launch shows rows straight away and
@@ -21,9 +19,11 @@ data class HomeSnapshot(
     val stops: List<Stop>,
     val departures: List<Departure>
 ) {
-    fun usableAt(lat: Double, lon: Double, nowMs: Long): Boolean =
+    /** Recent, from here, and "here" is a recent fix: a cached one may be where you used to be */
+    fun usableAt(fix: UserFix, nowMs: Long): Boolean =
         nowMs - savedAtMs in 0 until SNAPSHOT_MAX_AGE_MS &&
-            approxMeters(this.lat, this.lon, lat, lon) < SNAPSHOT_MAX_MOVE_M
+            nowMs - fix.timeMs < FRESH_FIX_MS &&
+            approxMeters(lat, lon, fix.lat, fix.lon) < STOPS_MOVE_M
 
     fun toJson(): String = gson.toJson(this)
 

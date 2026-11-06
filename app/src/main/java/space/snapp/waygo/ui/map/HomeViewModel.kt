@@ -13,6 +13,7 @@ import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import org.osmdroid.util.GeoPoint
@@ -24,8 +25,8 @@ import java.io.File
 private const val FAR_RADIUS_M = 1200
 /** With nothing at all within those, the nearest stops this far away (Pullenvale: 1.9 km) */
 private const val WIDE_RADIUS_M = 3000
-/** Refetch nearby stops only after moving this far (GPS updates every 10 s) */
-private const val REFETCH_STOPS_AFTER_M = 150.0
+/** The list holds still for this long after you touch the panel */
+private const val PANEL_TOUCH_HOLD_MS = 5_000L
 /** The saved view is rewritten at most this often */
 private const val SAVE_EVERY_MS = 60_000L
 
@@ -49,6 +50,17 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     // A refresh is on its way, so old rows aren't a connection problem yet
     var refreshing by mutableStateOf(false)
     var lastStopsFetch by mutableStateOf<GeoPoint?>(null)
+    private var lastStopsFetchMs = 0L
+    // Those stops came from an old cached fix, so a fresh one needn't wait to replace them
+    private var stopsFromOldFix = false
+    private var stopsJob: Job? = null
+    // Where walk times are measured from: you, in steps, so a drifting fix doesn't flick them
+    var walkFrom by mutableStateOf<GeoPoint?>(null)
+    // The stops the departures are for, so reopening needn't refetch what's seconds old
+    var departuresFor: List<String>? = null
+    // The panel is dragged up, or was just touched: the list holds still
+    var panelOpen by mutableStateOf(false)
+    var panelTouchedMs = 0L
     // Rebuilt every 15 s too, so a service that has just left drops off without waiting for a fetch
     var nowMs by mutableLongStateOf(System.currentTimeMillis())
 
@@ -77,31 +89,48 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Fetch nearby stops on the first fix, then only after moving a fair way. No fix, no stops:
+     * A new GPS fix. Your dot needs no data; walk times follow you locally; the stops are only
+     * fetched on the first fix and after a real move (see [shouldRefetchStops]). No fix, no stops:
      * showing the CBD's departures as if you were there would mislead.
      */
-    suspend fun onLocation(lat: Double, lon: Double) {
-        if (!inSeq(lat, lon)) return
-        restoreSnapshot(lat, lon)
-        val last = lastStopsFetch
-        if (last != null && approxMeters(last.latitude, last.longitude, lat, lon) < REFETCH_STOPS_AFTER_M) return
-        runCatching {
-            // Semi-rural streets can be kilometres from a stop: look wider rather than show nothing
-            api.stopsNearMe(lat, lon, radius = 500, farRadius = FAR_RADIUS_M)
-                .ifEmpty { api.stopsNearMe(lat, lon, radius = WIDE_RADIUS_M) }
-        }.onSuccess { stops ->
-            lastStopsFetch = GeoPoint(lat, lon)
-            stopGroups = groupStops(stops)
-            // No usable stops: nothing will fetch departures, so end the "finding" state here
-            if (stopGroups.isEmpty()) { nearbyDeps = emptyList(); depsUpdatedMs = System.currentTimeMillis() }
+    fun onFix(fix: UserFix, held: Boolean) {
+        if (!inSeq(fix.lat, fix.lon)) return
+        val walk = walkFrom
+        if (fix.accurate && (walk == null || approxMeters(walk.latitude, walk.longitude, fix.lat, fix.lon) >= WALK_ORIGIN_STEP_M)) {
+            walkFrom = GeoPoint(fix.lat, fix.lon)
+        }
+        // Its own job, not the caller's: with a fix every 5 s, a slow network would never finish
+        if (stopsJob?.isActive == true) return
+        stopsJob = viewModelScope.launch {
+            restoreSnapshot(fix)
+            val now = System.currentTimeMillis()
+            val anchor = lastStopsFetch
+            val lastFetch = if (stopsFromOldFix && now - fix.timeMs < FRESH_FIX_MS) 0L else lastStopsFetchMs
+            if (!shouldRefetchStops(anchor?.latitude, anchor?.longitude, fix, lastFetch, now, held)) return@launch
+            runCatching {
+                // Semi-rural streets can be kilometres from a stop: look wider rather than show nothing
+                api.stopsNearMe(fix.lat, fix.lon, radius = 500, farRadius = FAR_RADIUS_M)
+                    .ifEmpty { api.stopsNearMe(fix.lat, fix.lon, radius = WIDE_RADIUS_M) }
+            }.onSuccess { stops ->
+                lastStopsFetch = GeoPoint(fix.lat, fix.lon)
+                lastStopsFetchMs = System.currentTimeMillis()
+                stopsFromOldFix = lastStopsFetchMs - fix.timeMs >= FRESH_FIX_MS
+                stopGroups = groupStops(stops)
+                // No usable stops: nothing will fetch departures, so end the "finding" state here
+                if (stopGroups.isEmpty()) { nearbyDeps = emptyList(); depsUpdatedMs = System.currentTimeMillis() }
+            }
         }
     }
 
+    /** Whether the list is in use: it won't change under your finger */
+    fun listHeld(nowMs: Long): Boolean =
+        panelOpen || selectedKey != null || nowMs - panelTouchedMs < PANEL_TOUCH_HOLD_MS
+
     /** The last view, if it's recent and from here. Its stops also spare a fetch. */
-    private suspend fun restoreSnapshot(lat: Double, lon: Double) {
+    private suspend fun restoreSnapshot(fix: UserFix) {
         if (lastStopsFetch != null) return
         val saved = savedSnapshot.await() ?: return
-        if (lastStopsFetch != null || !saved.usableAt(lat, lon, System.currentTimeMillis())) return
+        if (lastStopsFetch != null || !saved.usableAt(fix, System.currentTimeMillis())) return
         lastStopsFetch = GeoPoint(saved.lat, saved.lon)
         stopGroups = groupStops(saved.stops)
         nearbyDeps = saved.departures
@@ -120,6 +149,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         }.onSuccess {
             nearbyDeps = it
             depsUpdatedMs = System.currentTimeMillis()
+            departuresFor = stopCodes
             saveSnapshot()
         }
         refreshing = false

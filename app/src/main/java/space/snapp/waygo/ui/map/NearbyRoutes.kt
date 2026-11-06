@@ -30,7 +30,9 @@ data class NearbyRoute(
     val stop: Stop?,
     /** From where the stops were fetched, so it only changes when the list is refetched */
     val distanceM: Double,
-    val departures: List<Departure>
+    val departures: List<Departure>,
+    /** From you now, for the walk time; [distanceM] keeps the order steady as you walk */
+    val walkM: Double = distanceM
 ) {
     val first: Departure get() = departures.first()
 
@@ -47,7 +49,7 @@ data class NearbyRoute(
 
     val walkMinutes: Int
         get() {
-            val m = ceil(distanceM * DETOUR / WALK_M_PER_MIN).toInt().coerceAtLeast(1)
+            val m = ceil(walkM * DETOUR / WALK_M_PER_MIN).toInt().coerceAtLeast(1)
             return if (isBusStation) maxOf(m, BUS_STATION_MIN_WALK) else m
         }
 
@@ -126,7 +128,13 @@ private val MODE_ORDER = listOf(VehicleType.Rail, VehicleType.Bus, VehicleType.F
  * Ordered by walk distance, then mode and route number: a stable order, so rows don't
  * reshuffle every time a bus comes and goes. Services ending at their stop are left out.
  */
-fun buildNearbyRoutes(groups: List<StopGroup>, departures: List<Departure>): List<NearbyRoute> {
+fun buildNearbyRoutes(
+    groups: List<StopGroup>,
+    departures: List<Departure>,
+    /** Where you are now, for walk times; without it they're from where the stops were fetched */
+    walkFromLat: Double? = null,
+    walkFromLon: Double? = null
+): List<NearbyRoute> {
     val groupOfStop = groups.flatMap { g -> g.stops.map { it.id to g } }.toMap()
     val stopById = groups.flatMap { it.stops }.associateBy { it.id }
     return departures
@@ -138,8 +146,11 @@ fun buildNearbyRoutes(groups: List<StopGroup>, departures: List<Departure>): Lis
                 .minByOrNull { stopById[it]?.distanceMeters ?: Double.MAX_VALUE } ?: return@mapNotNull null
             val atStop = deps.filter { it.stopId == nearestStop }.sortedBy { it.liveSeconds }.take(ROUTE_ROW_TIMES)
             val first = atStop.firstOrNull() ?: return@mapNotNull null
-            NearbyRoute(key, first.mode, groupOfStop.getValue(nearestStop), stopById[nearestStop],
-                stopById[nearestStop]?.distanceMeters ?: 0.0, atStop)
+            val stop = stopById[nearestStop]
+            val distance = stop?.distanceMeters ?: 0.0
+            val walk = if (stop != null && walkFromLat != null && walkFromLon != null)
+                approxMeters(walkFromLat, walkFromLon, stop.latitude, stop.longitude) else distance
+            NearbyRoute(key, first.mode, groupOfStop.getValue(nearestStop), stop, distance, atStop, walk)
         }
         .sortedWith(compareBy<NearbyRoute>(
             { (it.distanceM / ORDER_BAND_M).toInt() },

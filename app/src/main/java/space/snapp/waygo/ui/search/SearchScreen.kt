@@ -45,6 +45,7 @@ import androidx.compose.ui.focus.focusRequester
 import kotlinx.coroutines.delay
 import androidx.compose.ui.platform.LocalDensity
 import space.snapp.waygo.ui.map.NearbyStopsMapView
+import space.snapp.waygo.ui.map.UserFix
 import space.snapp.waygo.ui.map.WhereToHeader
 import space.snapp.waygo.ui.favorites.AddFavouritePlaceSheet
 import space.snapp.waygo.ui.plan.ItineraryDetailScreen
@@ -61,7 +62,7 @@ fun SearchScreen(
     planViewModel: PlanViewModel,
     userLat: Double?,
     userLon: Double?,
-    userAccuracyM: Float? = null,
+    userFix: UserFix? = null,
     hasLocationPermission: Boolean = true,
     onRequestLocation: () -> Unit = {},
     networkAlertsVM: NetworkAlertsViewModel,
@@ -136,7 +137,7 @@ fun SearchScreen(
         NearbyStopsMapView(
             userLat = userLat,
             userLon = userLon,
-            userAccuracyM = userAccuracyM,
+            userFix = userFix,
             hasLocationPermission = hasLocationPermission,
             onRequestLocation = onRequestLocation,
             // The save prompt sits at the end of the map's bottom panel

@@ -25,15 +25,19 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.location.Location
 import android.os.Looper
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import space.snapp.waygo.data.api.models.Departure
 import space.snapp.waygo.ui.departures.DeparturesViewModel
 import space.snapp.waygo.ui.favorites.FavoritesViewModel
+import space.snapp.waygo.ui.map.MovementTracker
+import space.snapp.waygo.ui.map.UserFix
 import space.snapp.waygo.ui.nearme.NearMeScreen
 import space.snapp.waygo.ui.nearme.NearMeViewModel
 import space.snapp.waygo.ui.search.SearchScreen
@@ -45,6 +49,11 @@ import space.snapp.waygo.ui.alerts.NetworkAlertsViewModel
 import space.snapp.waygo.ui.tripdetail.TripDetailArgs
 import space.snapp.waygo.ui.tripdetail.TripDetailScreen
 import space.snapp.waygo.ui.tripdetail.TripDetailViewModel
+
+/** GPS update interval while you're moving */
+private const val MOVING_FIX_MS = 5_000L
+/** …and while you're standing still */
+private const val STILL_FIX_MS = 30_000L
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -84,9 +93,27 @@ fun WayGoApp(
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         )
     }
-    var userLat by remember { mutableStateOf(fakeLocation?.first) }
-    var userLon by remember { mutableStateOf(fakeLocation?.second) }
-    var userAccuracy by remember { mutableStateOf<Float?>(null) }
+    var userFix by remember {
+        mutableStateOf(fakeLocation?.let { UserFix(it.first, it.second, timeMs = System.currentTimeMillis()) })
+    }
+    val userLat = userFix?.lat
+    val userLon = userFix?.lon
+    // GPS works hard while you're moving and eases off when you aren't
+    val movement = remember { MovementTracker() }
+    var moving by remember { mutableStateOf(true) }
+    fun takeFix(loc: Location) {
+        // A cached fix can arrive after a fresher one
+        if (loc.time < (userFix?.timeMs ?: 0L)) return
+        val fix = UserFix(
+            lat = loc.latitude,
+            lon = loc.longitude,
+            accuracyM = loc.accuracy.takeIf { loc.hasAccuracy() },
+            speedMps = loc.speed.takeIf { loc.hasSpeed() },
+            timeMs = loc.time
+        )
+        userFix = fix
+        moving = movement.update(fix, System.currentTimeMillis())
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -95,21 +122,30 @@ fun WayGoApp(
                 perms[Manifest.permission.ACCESS_COARSE_LOCATION] == true
     }
 
-    // Request an immediate fix then keep updating every 10 s while the app is on screen
+    // On opening: the cached fix at once, for speed, and a fresh one straight after, because the
+    // cached one may be from before you moved
     val appVisible by AppVisibility.visible.collectAsState()
     DisposableEffect(hasLocationPermission, appVisible) {
         if (!hasLocationPermission || !appVisible || fakeLocation != null) return@DisposableEffect onDispose {}
+        movement.reset(System.currentTimeMillis())
+        moving = true
         val client = LocationServices.getFusedLocationProviderClient(context)
-        // Immediate best-effort fix from cache
-        client.lastLocation.addOnSuccessListener { loc ->
-            loc?.let { userLat = it.latitude; userLon = it.longitude; userAccuracy = it.accuracy.takeIf { _ -> it.hasAccuracy() } }
-        }
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10_000L)
-            .setMinUpdateIntervalMillis(5_000L)
+        client.lastLocation.addOnSuccessListener { loc -> loc?.let(::takeFix) }
+        val cancel = CancellationTokenSource()
+        client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cancel.token)
+            .addOnSuccessListener { loc -> loc?.let(::takeFix) }
+        onDispose { cancel.cancel() }
+    }
+    // Then updates while the app is on screen: often while moving, gently while still
+    DisposableEffect(hasLocationPermission, appVisible, moving) {
+        if (!hasLocationPermission || !appVisible || fakeLocation != null) return@DisposableEffect onDispose {}
+        val client = LocationServices.getFusedLocationProviderClient(context)
+        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, if (moving) MOVING_FIX_MS else STILL_FIX_MS)
+            .setMinUpdateIntervalMillis(if (moving) MOVING_FIX_MS / 2 else STILL_FIX_MS / 2)
             .build()
         val callback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
-                result.lastLocation?.let { userLat = it.latitude; userLon = it.longitude; userAccuracy = it.accuracy.takeIf { _ -> it.hasAccuracy() } }
+                result.lastLocation?.let(::takeFix)
             }
         }
         client.requestLocationUpdates(request, callback, Looper.getMainLooper())
@@ -201,7 +237,7 @@ fun WayGoApp(
                     planViewModel = planVM,
                     userLat = userLat,
                     userLon = userLon,
-                    userAccuracyM = userAccuracy,
+                    userFix = userFix,
                     hasLocationPermission = hasLocationPermission || fakeLocation != null,
                     onRequestLocation = {
                         permissionLauncher.launch(arrayOf(
