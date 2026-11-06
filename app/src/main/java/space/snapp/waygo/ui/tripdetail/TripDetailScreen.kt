@@ -78,6 +78,7 @@ import space.snapp.waygo.ui.components.LiveIndicator
 import space.snapp.waygo.ui.components.delayLabel
 import space.snapp.waygo.ui.map.ESRI_DARK_GRAY_BASE
 import space.snapp.waygo.ui.map.addDarkCanvasLabels
+import space.snapp.waygo.data.api.models.VehicleType
 import space.snapp.waygo.ui.map.createVehicleMarkerIcon
 import java.util.Calendar
 import java.util.Date
@@ -1069,6 +1070,7 @@ private fun rebuildTripMap(
             position = GeoPoint(v.lat, v.lon)
             icon = createVehicleMarkerIcon(
                 context,
+                mode = detail.tripInfo.routeType?.let { VehicleType.fromGtfsType(it) } ?: VehicleType.Bus,
                 // No text on rail markers: their short names are internal codes
                 label = if (isRail(detail.tripInfo.routeType)) "" else detail.tripInfo.routeShortName,
                 routeColor = routeColorInt,

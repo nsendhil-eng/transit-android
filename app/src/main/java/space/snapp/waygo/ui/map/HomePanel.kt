@@ -17,6 +17,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -141,7 +143,7 @@ fun HomePanel(
 private fun StopHeader(section: StopSection) {
     val r = section.first
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 2.dp)) {
-        Icon(r.mode.icon(), contentDescription = r.mode.label, tint = r.mode.tint, modifier = Modifier.size(15.dp))
+        Icon(r.mode.icon(), contentDescription = r.mode.label, tint = r.iconTint, modifier = Modifier.size(15.dp))
         Spacer(Modifier.width(6.dp))
         Text(r.placeLabel + (section.direction?.let { " · $it" } ?: ""), style = MaterialTheme.typography.labelLarge,
             color = DestText, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
@@ -181,7 +183,7 @@ private fun RouteRow(
     ) {
         Column(Modifier.padding(horizontal = 8.dp, vertical = 7.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(r.mode.icon(), contentDescription = r.mode.label, tint = r.mode.tint, modifier = Modifier.size(15.dp))
+                Icon(r.mode.icon(), contentDescription = r.mode.label, tint = r.iconTint, modifier = Modifier.size(15.dp))
                 Spacer(Modifier.width(6.dp))
                 RoutePill(r.first, Modifier.weight(1f, fill = false))
                 // Trains: the pill already says where it goes
@@ -230,6 +232,15 @@ private val Departure.timeColor: Color
         isRealtime == true -> LiveGreen
         else -> Color.White
     }
+
+/** The route's own colour, so icon and pill match; very dark ones lifted to show on the panel */
+private val NearbyRoute.iconTint: Color
+    get() {
+        val route = first.routeColorInt?.let { Color(it) } ?: return mode.tint
+        return if (route.luminance() < MIN_ICON_LUMINANCE) lerp(route, Color.White, 0.4f) else route
+    }
+
+private const val MIN_ICON_LUMINANCE = 0.1f
 
 private val VehicleType.tint: Color
     get() = when (this) {

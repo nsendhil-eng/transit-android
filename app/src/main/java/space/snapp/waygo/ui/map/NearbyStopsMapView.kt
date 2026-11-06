@@ -118,6 +118,7 @@ fun NearbyStopsMapView(
     // The map's layers, bottom to top, each redrawn only when its own data changes
     val density = LocalDensity.current
     val tripLayer = remember { FolderOverlay() }
+    val tripVehicleLayer = remember { FolderOverlay() }
     val routePaths = remember { RoutePathsOverlay(density.density) }
     val vehicleLayer = remember { FolderOverlay() }
     val stopLabels = remember {
@@ -256,6 +257,7 @@ fun NearbyStopsMapView(
                 position = GeoPoint(v.lat, v.lon)
                 icon = createVehicleMarkerIcon(
                     context,
+                    mode = dep.mode,
                     // Rail short names are internal codes: arrow badge only
                     label = if (dep.mode == VehicleType.Rail) "" else dep.routeNumber,
                     routeColor = color,
@@ -292,6 +294,7 @@ fun NearbyStopsMapView(
         val map = mapRef.value ?: return@LaunchedEffect
         val dp = density.density
         tripLayer.items.clear()
+        tripVehicleLayer.items.clear()
 
         for (trip in tripLiveData) {
             if (trip.hasPassed) continue
@@ -334,6 +337,7 @@ fun NearbyStopsMapView(
                     position = GeoPoint(v.lat, v.lon)
                     icon = createVehicleMarkerIcon(
                         context,
+                        mode = trip.routeType?.let { VehicleType.fromGtfsType(it) } ?: VehicleType.Bus,
                         // Rail short names are internal codes (SPRP, NAIP) — arrow badge only
                         label = if (trip.routeType == 1 || trip.routeType == 2) "" else trip.routeShortName,
                         routeColor = routeColorInt,
@@ -345,7 +349,7 @@ fun NearbyStopsMapView(
                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                     setInfoWindow(null)
                 }
-                tripLayer.add(marker)
+                tripVehicleLayer.add(marker)
             }
         }
         map.invalidate()
@@ -505,11 +509,13 @@ fun NearbyStopsMapView(
                         )
                         overlays.add(tripLayer)
                         overlays.add(routePaths)
-                        overlays.add(vehicleLayer)
                         // You, under the stops so they stay tappable
                         overlays.add(youOverlay)
                         overlays.add(stopLabels)
                         overlays.add(stopLayer)
+                        // Vehicles on top: one pulling up to a stop stays in full view
+                        overlays.add(tripVehicleLayer)
+                        overlays.add(vehicleLayer)
                         // Dragging the map stops following you (pinch-zoom keeps it)
                         addMapListener(object : MapListener {
                             override fun onScroll(event: ScrollEvent?) = false

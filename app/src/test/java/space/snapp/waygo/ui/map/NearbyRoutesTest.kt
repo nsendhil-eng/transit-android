@@ -216,4 +216,19 @@ class NearbyRoutesTest {
         assertEquals(334.0, rows.single().walkM, 1.0)
         assertEquals(6, rows.single().walkMinutes)
     }
+
+    @Test
+    fun `vehicle headings round to the nearest 5 degrees, and north wraps round`() {
+        assertEquals(45f, roundedHeading(46.4f))
+        assertEquals(0f, roundedHeading(358f))
+        assertEquals(null, roundedHeading(null))
+    }
+
+    @Test
+    fun `the route number moves above the vehicle only when the arrow points down at it`() {
+        assertFalse(numberGoesAbove(0f))
+        assertFalse(numberGoesAbove(90f))
+        assertTrue(numberGoesAbove(180f))
+        assertFalse(numberGoesAbove(null))
+    }
 }
