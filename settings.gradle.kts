@@ -9,3 +9,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "WayGo"
 include(":app")
+include(":baselineprofile")

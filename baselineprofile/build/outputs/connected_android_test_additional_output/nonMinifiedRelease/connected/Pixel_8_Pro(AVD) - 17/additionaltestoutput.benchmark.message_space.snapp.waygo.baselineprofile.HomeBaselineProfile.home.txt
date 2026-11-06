@@ -1,0 +1,6 @@
+HomeBaselineProfile_home
+Total run time Ns: 582377130443.
+Baseline profile [results](file://HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt)
+
+To copy the profile use:
+adb -e pull "/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof.txt" .

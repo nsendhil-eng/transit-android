@@ -1,0 +1,53 @@
+INFO: Constructing runner from config.
+INFO: Configuring Android Instrumentation driver: android_instrumentation_runtime {
+  instrumentation_info {
+    app_package: "space.snapp.waygo"
+    test_package: "space.snapp.waygo.baselineprofile"
+    test_runner_class: "androidx.test.runner.AndroidJUnitRunner"
+  }
+  instrumentation_args {
+    args_map {
+      key: "additionalTestOutputDir"
+      value: "/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output"
+    }
+    args_map {
+      key: "androidx.benchmark.enabledRules"
+      value: "baselineprofile"
+    }
+    args_map {
+      key: "androidx.benchmark.targetPackageName"
+      value: "space.snapp.waygo"
+    }
+  }
+}
+am_instrument_timeout: 31536000
+
+INFO: Configuring AndroidTestApkInstallerPlugin: apks_to_install {
+  apk_paths: "/Users/senthilnatarajan/Projects/Transit/transit-android/app/build/outputs/apk/nonMinifiedRelease/app-nonMinifiedRelease.apk"
+  install_options {
+  }
+  uninstall_after_test: true
+}
+apks_to_install {
+  apk_paths: "/Users/senthilnatarajan/Projects/Transit/transit-android/baselineprofile/build/outputs/apk/nonMinifiedRelease/baselineprofile-nonMinifiedRelease.apk"
+  install_options {
+  }
+  uninstall_after_test: true
+}
+instrumentation_target_package_id: "space.snapp.waygo.baselineprofile"
+
+INFO: No installables found in test fixture. Nothing to install.
+INFO: Installing [/Users/senthilnatarajan/Projects/Transit/transit-android/app/build/outputs/apk/nonMinifiedRelease/app-nonMinifiedRelease.apk] on device emulator-5554.
+INFO: Installing [/Users/senthilnatarajan/Projects/Transit/transit-android/baselineprofile/build/outputs/apk/nonMinifiedRelease/baselineprofile-nonMinifiedRelease.apk] on device emulator-5554.
+INFO: Start logcat streaming.
+INFO: Running Android Instrumentation driver.
+INFO: Copying files from device to host: /sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output to /Users/senthilnatarajan/Projects/Transit/transit-android/baselineprofile/build/outputs/connected_android_test_additional_output/nonMinifiedRelease/connected/Pixel_8_Pro(AVD) - 17
+INFO: Copying /sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt to /Users/senthilnatarajan/Projects/Transit/transit-android/baselineprofile/build/outputs/connected_android_test_additional_output/nonMinifiedRelease/connected/Pixel_8_Pro(AVD) - 17/HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt
+INFO: Copying /sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof.txt to /Users/senthilnatarajan/Projects/Transit/transit-android/baselineprofile/build/outputs/connected_android_test_additional_output/nonMinifiedRelease/connected/Pixel_8_Pro(AVD) - 17/HomeBaselineProfile_home-startup-prof.txt
+INFO: Copying files from device to host: /sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output to /Users/senthilnatarajan/Projects/Transit/transit-android/baselineprofile/build/outputs/connected_android_test_additional_output/nonMinifiedRelease/connected/Pixel_8_Pro(AVD) - 17
+INFO: Copying /sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt to /Users/senthilnatarajan/Projects/Transit/transit-android/baselineprofile/build/outputs/connected_android_test_additional_output/nonMinifiedRelease/connected/Pixel_8_Pro(AVD) - 17/HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt
+INFO: Copying /sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof.txt to /Users/senthilnatarajan/Projects/Transit/transit-android/baselineprofile/build/outputs/connected_android_test_additional_output/nonMinifiedRelease/connected/Pixel_8_Pro(AVD) - 17/HomeBaselineProfile_home-startup-prof.txt
+INFO: Stop logcat streaming.
+INFO: Uninstalling space.snapp.waygo for device emulator-5554.
+INFO: Uninstalling space.snapp.waygo.baselineprofile for device emulator-5554.
+INFO: Execute space.snapp.waygo.baselineprofile.HomeBaselineProfile.home: PASSED

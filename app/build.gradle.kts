@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.baselineprofile)
 }
 
 android {
@@ -17,8 +18,22 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("boolean", "FAKE_LOCATION", "true")
+        }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            buildConfigField("boolean", "FAKE_LOCATION", "false")
+        }
+        // What to run on your own phone: release speed, but signed with the debug key so it
+        // installs over a debug build and keeps your data. `./gradlew assembleFast`
+        create("fast") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
+            buildConfigField("boolean", "FAKE_LOCATION", "true")
         }
     }
     compileOptions {
@@ -26,7 +41,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
     kotlinOptions { jvmTarget = "11" }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
 }
 
 dependencies {
@@ -49,5 +64,7 @@ dependencies {
     implementation(libs.play.services.location)
     implementation(libs.datastore.preferences)
     implementation(libs.osmdroid)
+    implementation(libs.androidx.profileinstaller)
+    baselineProfile(project(":baselineprofile"))
     testImplementation("junit:junit:4.13.2")
 }

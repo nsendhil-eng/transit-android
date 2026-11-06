@@ -6,6 +6,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
 import retrofit2.http.Query
+import space.snapp.waygo.BuildConfig
 import space.snapp.waygo.data.api.models.AddressResult
 import space.snapp.waygo.data.api.models.AlertsResponse
 import space.snapp.waygo.data.api.models.Departure
@@ -141,7 +142,9 @@ interface TransitApiService {
 
     companion object {
         val instance: TransitApiService by lazy {
-            val logging = HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC }
+            val logging = HttpLoggingInterceptor().apply {
+                level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC else HttpLoggingInterceptor.Level.NONE
+            }
             val client = OkHttpClient.Builder()
                 .addInterceptor(logging)
                 .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)

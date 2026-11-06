@@ -50,10 +50,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        // Debug builds only: pretend to be somewhere else, for testing a place without going there
+        // Debug and fast builds only: pretend to be somewhere else, for testing a place without going there
         //   adb shell am start -n space.snapp.waygo/.MainActivity --ef fake_lat -27.4658 --ef fake_lon 153.0195
-        val debuggable = applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
-        val fakeLocation = intent.takeIf { debuggable && it.hasExtra("fake_lat") && it.hasExtra("fake_lon") }
+        val fakeLocation = intent.takeIf { BuildConfig.FAKE_LOCATION && it.hasExtra("fake_lat") && it.hasExtra("fake_lon") }
             ?.let { it.getFloatExtra("fake_lat", 0f).toDouble() to it.getFloatExtra("fake_lon", 0f).toDouble() }
         setContent {
             WayGoTheme {

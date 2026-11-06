@@ -1,0 +1,207 @@
+# proto-message: google.testing.platform.proto.api.core.TestSuiteResult
+# 2026-11-05T22:34:16.810007Z:
+test_suite_meta_data {
+  scheduled_test_case_count: 1
+  device {
+    id: "emulator-5554"
+    friendly_name: "primary"
+  }
+}
+test_status: PASSED
+test_result {
+  test_case {
+    test_class: "HomeBaselineProfile"
+    test_package: "space.snapp.waygo.baselineprofile"
+    test_method: "home"
+    start_time {
+      seconds: 1793917110
+      nanos: 975000000
+    }
+    end_time {
+      seconds: 1793918055
+      nanos: 908000000
+    }
+    device {
+      id: "emulator-5554"
+      friendly_name: "primary"
+    }
+  }
+  test_status: PASSED
+  output_artifact {
+    label {
+      label: "additionaltestoutput.benchmark.message"
+      namespace: "android"
+    }
+    source_path {
+      path: "/Users/senthilnatarajan/Projects/Transit/transit-android/baselineprofile/build/outputs/connected_android_test_additional_output/nonMinifiedRelease/connected/Pixel_8_Pro(AVD) - 17/additionaltestoutput.benchmark.message_space.snapp.waygo.baselineprofile.HomeBaselineProfile.home.txt"
+    }
+  }
+  output_artifact {
+    label {
+      label: "additionaltestoutput.benchmark.trace"
+      namespace: "android"
+    }
+    source_path {
+      path: "/Users/senthilnatarajan/Projects/Transit/transit-android/baselineprofile/build/outputs/connected_android_test_additional_output/nonMinifiedRelease/connected/Pixel_8_Pro(AVD) - 17/HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt"
+    }
+  }
+  output_artifact {
+    label {
+      label: "logcat"
+      namespace: "android"
+    }
+    source_path {
+      path: "/Users/senthilnatarajan/Projects/Transit/transit-android/baselineprofile/build/outputs/androidTest-results/connected/nonMinifiedRelease/Pixel_8_Pro(AVD) - 17/logcat-space.snapp.waygo.baselineprofile.HomeBaselineProfile-home.txt"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info"
+      namespace: "android"
+    }
+    source_path {
+      path: "/Users/senthilnatarajan/Projects/Transit/transit-android/baselineprofile/build/outputs/androidTest-results/connected/nonMinifiedRelease/Pixel_8_Pro(AVD) - 17/device-info.pb"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info.meminfo"
+      namespace: "android"
+    }
+    source_path {
+      path: "/Users/senthilnatarajan/Projects/Transit/transit-android/baselineprofile/build/outputs/androidTest-results/connected/nonMinifiedRelease/Pixel_8_Pro(AVD) - 17/meminfo"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info.cpuinfo"
+      namespace: "android"
+    }
+    source_path {
+      path: "/Users/senthilnatarajan/Projects/Transit/transit-android/baselineprofile/build/outputs/androidTest-results/connected/nonMinifiedRelease/Pixel_8_Pro(AVD) - 17/cpuinfo"
+    }
+  }
+  details {
+    key: "additionalTestOutputFile_HomeBaselineProfile_home-startup-prof.txt"
+    value: "/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof.txt"
+  }
+  details {
+    key: "additionalTestOutputFile_HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt"
+    value: "/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt"
+  }
+  details {
+    key: "android.studio.display.benchmark"
+    value: "HomeBaselineProfile_home\nTotal run time Ns: 582377130443.\nBaseline profile [results](file://HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt)\n\nTo copy the profile use:\nadb -e pull \"/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof.txt\" .\n"
+  }
+  details {
+    key: "android.studio.v2display.benchmark"
+    value: "HomeBaselineProfile_home\nTotal run time Ns: 582377130443.\nBaseline profile [results](file://HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt)\n\nTo copy the profile use:\nadb -e pull \"/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof.txt\" .\n"
+  }
+  details {
+    key: "android.studio.v2display.benchmark.outputDirPath"
+    value: "/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output"
+  }
+  details {
+    key: "android.studio.v3display.benchmark"
+    value: "HomeBaselineProfile_home\nTotal run time Ns: 582377130443.\nBaseline profile [results](file://HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt)\n\nTo copy the profile use:\nadb -e pull \"/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof.txt\" .\n"
+  }
+  details {
+    key: "android.studio.v3display.benchmark.outputDirPath"
+    value: "/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output"
+  }
+  details {
+    key: "additionalTestOutputFile_HomeBaselineProfile_home-startup-prof.txt"
+    value: "/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof.txt"
+  }
+  details {
+    key: "additionalTestOutputFile_HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt"
+    value: "/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt"
+  }
+  details {
+    key: "android.studio.display.benchmark"
+    value: "HomeBaselineProfile_home\nTotal run time Ns: 582377130443.\nBaseline profile [results](file://HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt)\n\nTo copy the profile use:\nadb -e pull \"/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof.txt\" .\n"
+  }
+  details {
+    key: "android.studio.v2display.benchmark"
+    value: "HomeBaselineProfile_home\nTotal run time Ns: 582377130443.\nBaseline profile [results](file://HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt)\n\nTo copy the profile use:\nadb -e pull \"/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof.txt\" .\n"
+  }
+  details {
+    key: "android.studio.v2display.benchmark.outputDirPath"
+    value: "/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output"
+  }
+  details {
+    key: "android.studio.v3display.benchmark"
+    value: "HomeBaselineProfile_home\nTotal run time Ns: 582377130443.\nBaseline profile [results](file://HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt)\n\nTo copy the profile use:\nadb -e pull \"/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof.txt\" .\n"
+  }
+  details {
+    key: "android.studio.v3display.benchmark.outputDirPath"
+    value: "/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output"
+  }
+  details {
+    key: "additionalTestOutputFile_HomeBaselineProfile_home-startup-prof.txt"
+    value: "/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof.txt"
+  }
+  details {
+    key: "additionalTestOutputFile_HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt"
+    value: "/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt"
+  }
+  details {
+    key: "android.studio.display.benchmark"
+    value: "HomeBaselineProfile_home\nTotal run time Ns: 582377130443.\nBaseline profile [results](file://HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt)\n\nTo copy the profile use:\nadb -e pull \"/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof.txt\" .\n"
+  }
+  details {
+    key: "android.studio.v2display.benchmark"
+    value: "HomeBaselineProfile_home\nTotal run time Ns: 582377130443.\nBaseline profile [results](file://HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt)\n\nTo copy the profile use:\nadb -e pull \"/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof.txt\" .\n"
+  }
+  details {
+    key: "android.studio.v2display.benchmark.outputDirPath"
+    value: "/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output"
+  }
+  details {
+    key: "android.studio.v3display.benchmark"
+    value: "HomeBaselineProfile_home\nTotal run time Ns: 582377130443.\nBaseline profile [results](file://HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt)\n\nTo copy the profile use:\nadb -e pull \"/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof.txt\" .\n"
+  }
+  details {
+    key: "android.studio.v3display.benchmark.outputDirPath"
+    value: "/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output"
+  }
+  details {
+    key: "additionalTestOutputFile_HomeBaselineProfile_home-startup-prof.txt"
+    value: "/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof.txt"
+  }
+  details {
+    key: "additionalTestOutputFile_HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt"
+    value: "/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt"
+  }
+  details {
+    key: "android.studio.display.benchmark"
+    value: "HomeBaselineProfile_home\nTotal run time Ns: 582377130443.\nBaseline profile [results](file://HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt)\n\nTo copy the profile use:\nadb -e pull \"/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof.txt\" .\n"
+  }
+  details {
+    key: "android.studio.v2display.benchmark"
+    value: "HomeBaselineProfile_home\nTotal run time Ns: 582377130443.\nBaseline profile [results](file://HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt)\n\nTo copy the profile use:\nadb -e pull \"/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof.txt\" .\n"
+  }
+  details {
+    key: "android.studio.v2display.benchmark.outputDirPath"
+    value: "/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output"
+  }
+  details {
+    key: "android.studio.v3display.benchmark"
+    value: "HomeBaselineProfile_home\nTotal run time Ns: 582377130443.\nBaseline profile [results](file://HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt)\n\nTo copy the profile use:\nadb -e pull \"/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof.txt\" .\n"
+  }
+  details {
+    key: "android.studio.v3display.benchmark.outputDirPath"
+    value: "/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output"
+  }
+}
+output_artifact {
+  label {
+    label: "test-results.log"
+    namespace: "com.google.testing.platform.runtime.android.driver.AndroidInstrumentationDriver"
+  }
+  source_path {
+    path: "/Users/senthilnatarajan/Projects/Transit/transit-android/baselineprofile/build/outputs/androidTest-results/connected/nonMinifiedRelease/Pixel_8_Pro(AVD) - 17/testlog/test-results.log"
+  }
+  type: TEST_DATA
+  mime_type: "text/plain"
+}

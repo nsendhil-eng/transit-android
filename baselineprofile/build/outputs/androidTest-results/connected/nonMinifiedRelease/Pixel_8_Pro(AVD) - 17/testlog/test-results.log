@@ -1,0 +1,52 @@
+INSTRUMENTATION_STATUS: class=space.snapp.waygo.baselineprofile.HomeBaselineProfile
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stream=
+space.snapp.waygo.baselineprofile.HomeBaselineProfile:
+INSTRUMENTATION_STATUS: test=home
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: additionalTestOutputFile_HomeBaselineProfile_home-startup-prof.txt=/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof.txt
+INSTRUMENTATION_STATUS_CODE: 2
+INSTRUMENTATION_STATUS: additionalTestOutputFile_HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt=/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt
+INSTRUMENTATION_STATUS_CODE: 2
+INSTRUMENTATION_STATUS: android.studio.display.benchmark=HomeBaselineProfile_home
+Total run time Ns: 582377130443.
+Baseline profile [results](file://HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt)
+
+To copy the profile use:
+adb -e pull "/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof.txt" .
+
+INSTRUMENTATION_STATUS: android.studio.v2display.benchmark=HomeBaselineProfile_home
+Total run time Ns: 582377130443.
+Baseline profile [results](file://HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt)
+
+To copy the profile use:
+adb -e pull "/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof.txt" .
+
+INSTRUMENTATION_STATUS: android.studio.v2display.benchmark.outputDirPath=/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output
+INSTRUMENTATION_STATUS: android.studio.v3display.benchmark=HomeBaselineProfile_home
+Total run time Ns: 582377130443.
+Baseline profile [results](file://HomeBaselineProfile_home-startup-prof-2026-11-05-22-34-15.txt)
+
+To copy the profile use:
+adb -e pull "/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output/HomeBaselineProfile_home-startup-prof.txt" .
+
+INSTRUMENTATION_STATUS: android.studio.v3display.benchmark.outputDirPath=/sdcard/Android/media/space.snapp.waygo.baselineprofile/additional_test_output
+INSTRUMENTATION_STATUS_CODE: 2
+INSTRUMENTATION_STATUS: class=space.snapp.waygo.baselineprofile.HomeBaselineProfile
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=home
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_RESULT: stream=
+
+Time: 944.521
+
+OK (1 test)
+
+
+INSTRUMENTATION_CODE: -1
+
