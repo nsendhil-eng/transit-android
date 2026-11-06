@@ -23,6 +23,9 @@ class EsriTileSource(name: String, baseUrl: String) : OnlineTileSourceBase(
     }
 }
 
+/** The base map's land colour; the launch window (themes.xml) matches it */
+private const val MAP_DARK = 0xFF262626.toInt()
+
 /** Muted dark gray basemap — no labels, low contrast. */
 val ESRI_DARK_GRAY_BASE = EsriTileSource(
     "Esri.DarkGrayCanvas",
@@ -44,6 +47,9 @@ private val labelsOverlays = java.util.WeakHashMap<MapView, TilesOverlay>()
  * provider, with its threads, on every redraw.) It's released with the map, in MapView.onDetach.
  */
 fun MapView.addDarkCanvasLabels(context: Context) {
+    // Tiles not loaded yet: the map's own colour, not osmdroid's grey grid
+    overlayManager.tilesOverlay.loadingBackgroundColor = MAP_DARK
+    overlayManager.tilesOverlay.loadingLineColor = MAP_DARK
     val labelsOverlay = labelsOverlays.getOrPut(this) {
         TilesOverlay(MapTileProviderBasic(context, ESRI_DARK_GRAY_LABELS), context).apply {
             loadingBackgroundColor = android.graphics.Color.TRANSPARENT

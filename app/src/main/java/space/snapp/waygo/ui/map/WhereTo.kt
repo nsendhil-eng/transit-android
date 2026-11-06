@@ -31,6 +31,8 @@ private const val ETA_REFRESH_MS = 120_000L
 private const val ETA_MOVE_STEP = 0.003
 /** Chips shown in the panel; more places live on the Favourites tab */
 private const val MAX_CHIPS = 3
+/** About a place chip's two lines of text */
+private val CHIP_ROW_HEIGHT = 58.dp
 
 private val BarBg = Color(0xFF262C34)
 private val ChipBg = Color(0xFF21262D)
@@ -45,6 +47,8 @@ private val Accent = Color(0xFF4FB3FF)
 @Composable
 fun WhereToHeader(
     places: List<FavoritePlace>,
+    /** Until then the chips stay empty: offering "Set home" to someone with a Home is wrong */
+    placesLoaded: Boolean,
     userLat: Double?,
     userLon: Double?,
     onWhereTo: () -> Unit,
@@ -70,12 +74,15 @@ fun WhereToHeader(
             }
         }
         Spacer(Modifier.height(8.dp))
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val shown = places.take(MAX_CHIPS)
-            for (p in shown) PlaceChip(p, userLat, userLon, onClick = { onPlace(p) })
-            // Nothing saved: one tap to set Home (the zero-tap way home next time)
-            if (shown.none { it.name.equals("Home", true) }) GhostChip("Set home", Icons.Default.Home) { onAddPlace("Home") }
-            else if (shown.size < MAX_CHIPS) GhostChip("Add place", Icons.Default.Add) { onAddPlace("") }
+        // The row keeps its height while places load, so the panel doesn't jump when they arrive
+        Row(Modifier.heightIn(min = CHIP_ROW_HEIGHT).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (placesLoaded) {
+                val shown = places.take(MAX_CHIPS)
+                for (p in shown) PlaceChip(p, userLat, userLon, onClick = { onPlace(p) })
+                // Nothing saved: one tap to set Home (the zero-tap way home next time)
+                if (shown.none { it.name.equals("Home", true) }) GhostChip("Set home", Icons.Default.Home) { onAddPlace("Home") }
+                else if (shown.size < MAX_CHIPS) GhostChip("Add place", Icons.Default.Add) { onAddPlace("") }
+            }
         }
     }
 }

@@ -82,6 +82,7 @@ fun SearchScreen(
     var saveName by remember { mutableStateOf<String?>(null) }
     val favorites by favoritesVM.favorites.collectAsState()
     val savedPlaces by favoritesVM.favoritePlaces.collectAsState()
+    val placesLoaded by favoritesVM.placesLoaded.collectAsState()
     // "Set home" / "Add place" from the panel: the name to start the place sheet with, or null
     var addPlaceName by remember { mutableStateOf<String?>(null) }
     // The save prompt opens as a card until closed or something is saved, then stays as a pill
@@ -153,6 +154,7 @@ fun SearchScreen(
             sheetHeader = {
                 WhereToHeader(
                     places = savedPlaces,
+                    placesLoaded = placesLoaded,
                     userLat = userLat,
                     userLon = userLon,
                     onWhereTo = {

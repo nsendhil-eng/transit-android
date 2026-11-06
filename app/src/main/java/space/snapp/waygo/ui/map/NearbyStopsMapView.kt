@@ -28,6 +28,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,7 +37,6 @@ import space.snapp.waygo.ui.tripdetail.StopLabel
 import space.snapp.waygo.ui.tripdetail.StopLabelsOverlay
 import space.snapp.waygo.ui.tripdetail.mapStopName
 import kotlinx.coroutines.delay
-import org.osmdroid.config.Configuration
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
@@ -66,14 +66,8 @@ private const val STOP_LIVE_REFRESH_MS = 5_000L
 private const val CALLOUT_REFRESH_MS = 30_000L
 private const val PAN_SETTLE_MS = 1_500L
 private const val MAX_CALLOUT_STOPS = 45
-/** Trains and ferries are looked for this far away (about a 15 minute walk); buses within 500 m */
-private const val FAR_RADIUS_M = 1200
-/** With nothing at all within those, the nearest stops this far away (Pullenvale: 1.9 km) */
-private const val WIDE_RADIUS_M = 3000
-/** Refetch nearby stops only after moving this far (GPS updates every 10 s) */
-private const val REFETCH_STOPS_AFTER_M = 150.0
 /** Starting zoom, and where the re-centre button returns to */
-private const val DEFAULT_ZOOM = 16.5
+const val DEFAULT_ZOOM = 16.5
 /** Drag handle strip at the top of the bottom panel */
 private val SheetHandleHeight = 20.dp
 /** Room left above the panel when dragged all the way up: status bar, search and alert buttons */
@@ -105,8 +99,14 @@ fun NearbyStopsMapView(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val api = remember { TransitApiService.instance }
+    // The data lives here, so coming back from another tab doesn't start over
+    val home: HomeViewModel = viewModel()
+    val stopGroups = home.stopGroups
+    val nearbyDeps = home.nearbyDeps
+    var selectedKey by home::selectedKey
+    var following by home::following
+    var mapZoom by home::mapZoom
 
-    var stopGroups by remember { mutableStateOf<List<StopGroup>>(emptyList()) }
     var tripLiveData by remember { mutableStateOf<List<TripLive>>(emptyList()) }
     val selectedGroupState = remember { mutableStateOf<StopGroup?>(null) }
     val mapRef = remember { mutableStateOf<MapView?>(null) }
@@ -128,21 +128,10 @@ fun NearbyStopsMapView(
     }
     val stopLayer = remember { FolderOverlay() }
     val compass = rememberCompassHeading()
-    // The map follows you until you pan it; the re-centre button turns following back on
-    var following by remember { mutableStateOf(true) }
-    // Next departures nearby: each route + direction at its stop nearest you
-    var nearbyDeps by remember { mutableStateOf<List<Departure>>(emptyList()) }
-    // The panel row tapped once: its stop, route and live vehicles on the map; a second tap opens the stop
-    var selectedKey by remember { mutableStateOf<String?>(null) }
     // When the map was last dragged; refreshes wait until it settles
     val lastPanMs = remember { longArrayOf(0L) }
-    val lastStopsFetch = remember { mutableStateOf<GeoPoint?>(null) }
-    // When departures last arrived; the panel dims if refreshes keep failing
-    var depsUpdatedMs by remember { mutableLongStateOf(0L) }
-    // Rebuilt every 15 s too, so a service that has just left drops off without waiting for a fetch
-    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) { while (true) { delay(15_000); nowMs = System.currentTimeMillis() } }
-    val routes = remember(stopGroups, nearbyDeps, nowMs) { buildNearbyRoutes(stopGroups, nearbyDeps) }
+    LaunchedEffect(Unit) { while (true) { home.nowMs = System.currentTimeMillis(); delay(15_000) } }
+    val routes = remember(stopGroups, nearbyDeps, home.nowMs) { buildNearbyRoutes(stopGroups, nearbyDeps) }
     // Time to first rows: "Fully drawn" in logcat on launch, WayGoPerf on every return to this tab
     val composedAtMs = remember { android.os.SystemClock.uptimeMillis() }
     val hasRoutes = routes.isNotEmpty()
@@ -161,12 +150,11 @@ fun NearbyStopsMapView(
         userLat == null || userLon == null -> HomePanelState.Loading
         !inSeq(userLat, userLon) -> HomePanelState.OutsideSeq
         routes.isNotEmpty() -> HomePanelState.Ready
-        depsUpdatedMs == 0L -> HomePanelState.Loading
+        home.depsUpdatedMs == 0L -> HomePanelState.Loading
         else -> HomePanelState.NothingNearby
     }
     // Zoomed out, stops that would sit on top of each other thin out (a dozen dots round a city
     // station); the panel's top stops and the selected one always stay. Zoom tracked to a quarter level.
-    var mapZoom by remember { mutableDoubleStateOf(DEFAULT_ZOOM) }
     val shownStops = remember(stopGroups, peekGroupIds, focusedGroupId, mapZoom, userLat, userLon) {
         if (mapZoom >= ALL_STOPS_ZOOM) stopGroups
         else {
@@ -175,10 +163,6 @@ fun NearbyStopsMapView(
             val metersPerPx = 40_075_016.686 * cos(Math.toRadians(lat)) / (TileSystem.getTileSize() * 2.0.pow(mapZoom))
             declutterStops(stopGroups, keep, userLat, userLon, STOP_GAP_DP * context.resources.displayMetrics.density * metersPerPx)
         }
-    }
-
-    LaunchedEffect(Unit) {
-        Configuration.getInstance().userAgentValue = context.packageName
     }
 
     // Move the dot (and the map, while following) whenever location changes
@@ -198,25 +182,8 @@ fun NearbyStopsMapView(
         }
     }
 
-    // Fetch nearby stops on the first fix, then only after moving a fair way. No fix, no stops:
-    // showing the CBD's departures as if you were there would mislead.
     LaunchedEffect(userLat, userLon) {
-        val lat = userLat ?: return@LaunchedEffect
-        val lon = userLon ?: return@LaunchedEffect
-        if (!inSeq(lat, lon)) return@LaunchedEffect
-        val last = lastStopsFetch.value
-        if (last != null && approxMeters(last.latitude, last.longitude, lat, lon) < REFETCH_STOPS_AFTER_M) return@LaunchedEffect
-        runCatching {
-            // Semi-rural streets can be kilometres from a stop: look wider rather than show nothing
-            api.stopsNearMe(lat, lon, radius = 500, farRadius = FAR_RADIUS_M)
-                .ifEmpty { api.stopsNearMe(lat, lon, radius = WIDE_RADIUS_M) }
-        }
-            .onSuccess { stops ->
-                lastStopsFetch.value = GeoPoint(lat, lon)
-                stopGroups = groupStops(stops)
-                // No stops at all: nothing will fetch departures, so end the "finding" state here
-                if (stops.isEmpty()) { nearbyDeps = emptyList(); depsUpdatedMs = System.currentTimeMillis() }
-            }
+        home.onLocation(userLat ?: return@LaunchedEffect, userLon ?: return@LaunchedEffect)
     }
 
     // Departures for the nearby stops: every 30 s while the app is in front, never mid-pan.
@@ -226,22 +193,12 @@ fun NearbyStopsMapView(
             .distinct().take(MAX_CALLOUT_STOPS)
     }
     LaunchedEffect(stopCodes) {
-        if (stopCodes.isEmpty()) {
-            nearbyDeps = emptyList()
-            if (lastStopsFetch.value != null) depsUpdatedMs = System.currentTimeMillis()
-            return@LaunchedEffect
-        }
-        // Distances from where the stops were fetched, so the API's nearest-stop choice (and the
-        // panel's order) only changes when the stops do
-        val from = lastStopsFetch.value
+        if (stopCodes.isEmpty()) return@LaunchedEffect
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            home.refreshing = true
             while (true) {
                 while (System.currentTimeMillis() - lastPanMs[0] < PAN_SETTLE_MS) delay(PAN_SETTLE_MS)
-                runCatching {
-                    api.departures(stopCodes.joinToString(","), withHeading = 1,
-                        perRoute = ROUTE_ROW_TIMES, lat = from?.latitude, lon = from?.longitude)
-                }
-                    .onSuccess { nearbyDeps = it; depsUpdatedMs = System.currentTimeMillis() }
+                home.refreshDepartures(stopCodes)
                 delay(CALLOUT_REFRESH_MS)
             }
         }
@@ -249,8 +206,7 @@ fun NearbyStopsMapView(
 
     // The selected row's whole route and the live vehicles on its next services. Nothing is
     // drawn until a row is tapped: lines redrawn whenever the next bus changed were dizzying.
-    // Shapes depend only on the timetable, so each is fetched once and kept for the session.
-    val shapeCache = remember { mutableStateMapOf<String, List<GeoPoint>>() }
+    val shapeCache = home.shapeCache
     val drawn = selectedRoute?.departures.orEmpty()
     val missingShapes = drawn.take(1).mapNotNull { it.shapeId }.filter { it !in shapeCache }.toSet()
     LaunchedEffect(missingShapes) {
@@ -433,15 +389,21 @@ fun NearbyStopsMapView(
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            mapRef.value?.let { map ->
+                home.leftMapAt = GeoPoint(map.mapCenter.latitude, map.mapCenter.longitude)
+                home.leftMapZoom = map.zoomLevelDouble
+            }
+        }
     }
 
-    var peekPx by remember { mutableIntStateOf(0) }
-    var headerPx by remember { mutableIntStateOf(0) }
+    var peekPx by home::peekPx
+    var headerPx by home::headerPx
     // Three positions: resting (header + nearest routes), dragged up (every route), and dragged
     // down to just the header so the map gets the screen. Material's sheet has two, so a drag
     // below resting "hides" it, which is caught here and turned into the lower peek.
-    var lowered by remember { mutableStateOf(false) }
+    var lowered by home::lowered
     val peekHeight = SheetHandleHeight + with(density) { (if (lowered && headerPx > 0) headerPx else peekPx).toDp() }
     // Centre the map in the part you can see, above the panel, so you aren't under it
     val peekHeightPx = with(density) { peekHeight.roundToPx() }
@@ -481,8 +443,9 @@ fun NearbyStopsMapView(
                     state = panelState,
                     routes = routes,
                     selectedKey = selectedKey,
-                    updatedAtMs = depsUpdatedMs,
-                    now = nowMs,
+                    updatedAtMs = home.depsUpdatedMs,
+                    refreshing = home.refreshing,
+                    now = home.nowMs,
                     onRouteTap = { r ->
                         if (selectedKey == r.key) {
                             selectedGroupState.value = r.group
@@ -512,8 +475,15 @@ fun NearbyStopsMapView(
                         setMultiTouchControls(true)
                         // Pinch to zoom; osmdroid's own −/+ buttons clash with the dark map
                         zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
-                        controller.setZoom(DEFAULT_ZOOM)
-                        controller.setCenter(GeoPoint(userLat ?: BRISBANE_LAT, userLon ?: BRISBANE_LON))
+                        controller.setZoom(home.leftMapZoom)
+                        // Where you left it; else you; else where you were last time
+                        controller.setCenter(
+                            home.leftMapAt.takeUnless { following }
+                                ?: youOverlay.position
+                                ?: userLat?.let { lat -> userLon?.let { lon -> GeoPoint(lat, lon) } }
+                                ?: home.lastKnownLocation
+                                ?: GeoPoint(BRISBANE_LAT, BRISBANE_LON)
+                        )
                         overlays.add(tripLayer)
                         overlays.add(routePaths)
                         overlays.add(vehicleLayer)

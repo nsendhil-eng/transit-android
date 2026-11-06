@@ -39,6 +39,10 @@ class FavoritesViewModel(private val repo: FavoritesRepository) : ViewModel() {
     private val _favDepartures = MutableStateFlow<Map<String, List<Departure>>>(emptyMap())
     val favDepartures = _favDepartures.asStateFlow()
 
+    // Saved places come off disk a moment after launch; until then "none saved" isn't known
+    private val _placesLoaded = MutableStateFlow(false)
+    val placesLoaded = _placesLoaded.asStateFlow()
+
     private var pollingJob: Job? = null
 
     init {
@@ -46,7 +50,7 @@ class FavoritesViewModel(private val repo: FavoritesRepository) : ViewModel() {
             repo.favoriteStops.collect { _favorites.value = it }
         }
         viewModelScope.launch {
-            repo.favoritePlaces.collect { _favoritePlaces.value = it }
+            repo.favoritePlaces.collect { _favoritePlaces.value = it; _placesLoaded.value = true }
         }
     }
 

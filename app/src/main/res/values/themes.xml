@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.WayGo" parent="android:Theme.Material.Light.NoActionBar" />
+    <color name="launch_dark">#FF262626</color>
+    <!-- Dark, the map's colour: a light window flashes white before the first frame -->
+    <style name="Theme.WayGo" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/launch_dark</item>
+    </style>
 </resources>

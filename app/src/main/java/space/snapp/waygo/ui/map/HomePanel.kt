@@ -60,6 +60,8 @@ fun HomePanel(
     selectedKey: String?,
     /** When the departures were fetched; older than STALE_AFTER_MS and the panel says so */
     updatedAtMs: Long,
+    /** A refresh is on its way, so old rows aren't worth a warning yet */
+    refreshing: Boolean = false,
     /** The panel's clock, ticking with [routes] so the two only update together */
     now: Long,
     onRouteTap: (NearbyRoute) -> Unit,
@@ -96,7 +98,7 @@ fun HomePanel(
             Column(Modifier.onSizeChanged { onPeekHeight(it.height) }) {
                 Box(Modifier.onSizeChanged { onHeaderHeight(it.height) }) { header() }
                 Spacer(Modifier.height(6.dp))
-                if (staleMin != null && state == HomePanelState.Ready) {
+                if (staleMin != null && !refreshing && state == HomePanelState.Ready) {
                     Text("Last updated $staleMin min ago · check your connection", fontSize = 11.sp, color = LateAmber,
                         modifier = Modifier.padding(start = 16.dp, bottom = 4.dp))
                 }
